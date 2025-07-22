@@ -20,8 +20,8 @@
         mode: '0755'
 
     - name: Definir ruta del WAR
-        set_fact:
-          war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
+      set_fact:
+        war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
 
     - name: Limpiar carpeta de despliegue anterior
       file:
