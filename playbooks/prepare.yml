@@ -4,15 +4,8 @@
   become: false
   vars_files:
     - vars/{{ app_name }}.yml
-    
+
   tasks:
-    - name: Mostrar todas las variables clave
-      debug:
-        msg:
-          - "APP_NAME: {{ app_name }}"
-          - "APP_VERSION: {{ app_version }}"
-          - "NEXUS_USER: {{ nexus_user }}"
-          - "NEXUS_PASS definido: {{ nexus_pass is defined and nexus_pass | length > 0 }}"
 
     - name: Verificar si el puerto 7001 está abierto (AdminServer)
       wait_for:
@@ -26,11 +19,11 @@
         state: directory
         mode: '0755'
 
-    - name: Definir ruta del WAR
+    - name: Definir ruta completa del WAR
       set_fact:
         war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
 
-    - name: Limpiar carpeta de despliegue anterior
+    - name: Limpiar WAR previo si existe
       file:
         path: "{{ war_path }}"
         state: absent
@@ -38,17 +31,35 @@
     - name: Descargar WAR desde Nexus
       get_url:
         url: "{{ nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
-        dest: "{{ war_path }}"  
+        dest: "{{ war_path }}"
         mode: '0644'
+        url_username: "{{ nexus_user }}"
+        url_password: "{{ nexus_pass }}"
+        use_netrc: false
+
+    - name: Obtener hash SHA256 real del WAR
+      command: "sha256sum {{ war_path }}"
+      register: war_hash_result
+      changed_when: false
+
+    - name: Verificar que el hash SHA256 coincide con el esperado
+      assert:
+        that:
+          - "war_hash_result.stdout.split()[0] == expected_sha256"
+        fail_msg: "❌ Hash del WAR no coincide: archivo corrupto o modificado"
+        success_msg: "✅ Hash verificado correctamente: archivo íntegro"
 
     - name: Guardar log de preparación
       copy:
         content: |
-          [{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}] Preparación de entorno:
+          [{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}] Preparación de entorno WebLogic:
+          Dominio: {{ dominio }}
           Puerto 7001 verificado.
-          Carpeta /opt/deploy/{{ app_name }} creada.
-          WAR anterior eliminado.
-          Nuevo WAR descargado: {{ app_name }}-{{ app_version }}.war
+          Carpeta de despliegue: /opt/deploy/{{ app_name }}
+          WAR descargado: {{ war_path }}
+          Hash actual: {{ war_hash_result.stdout.split()[0] }}
+          Hash esperado: {{ expected_sha256 }}
+          Integridad confirmada: {{ war_hash_result.stdout.split()[0] == expected_sha256 }}
         dest: "/opt/logs/prepare_{{ app_name }}_{{ app_version }}.log"
         mode: '0644'
 
