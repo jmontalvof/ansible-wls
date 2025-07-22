@@ -55,6 +55,12 @@
         fail_msg: "❌ El WAR descargado no coincide con el hash esperado"
         success_msg: "✅ Integridad confirmada vía SHA256"
 
+   - name: Crear carpeta de logs si no existe
+     file:
+        path: "/opt/logs"
+        state: directory
+        mode: '0755'
+
     - name: Guardar log de preparación
       copy:
         content: |
