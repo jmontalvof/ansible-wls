@@ -24,13 +24,13 @@ pipeline {
       }
     }
 
-stage('DEPLOY') {
-  steps {
-    sshagent(['clave-jenkins']) {
-      withCredentials([
-        usernamePassword(credentialsId: 'weblogic-user', usernameVariable: 'WL_USER', passwordVariable: 'WL_PASS'),
-        usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')
-      ]) {
+    stage('DEPLOY') {
+       steps {
+         sshagent(['clave-jenkins']) {
+         withCredentials([
+             usernamePassword(credentialsId: 'weblogic-user', usernameVariable: 'WL_USER', passwordVariable: 'WL_PASS'),
+             usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')
+         ]) {
         // Exporta al entorno para que lookup() lo detecte
         env.WL_USER = WL_USER
         env.WL_PASS = WL_PASS
