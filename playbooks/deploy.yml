@@ -1,0 +1,55 @@
+---
+- name: Desplegar aplicación WAR en WebLogic
+  hosts: all
+  become: false
+  vars_files:
+    - vars/{{ app_name }}.yml
+
+  tasks:
+
+    - name: Definir fecha de despliegue
+      set_fact:
+        fecha_deploy: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+
+    - name: Crear carpeta de logs si no existe
+      file:
+        path: "/opt/logs"
+        state: directory
+        mode: '0755'
+
+    - name: Descargar WAR desde Nexus
+      get_url:
+        url: "{{ nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
+        dest: "/tmp/{{ app_name }}-{{ app_version }}.war"
+        mode: '0644'
+        url_username: "{{ nexus_user | default(omit) }}"
+        url_password: "{{ nexus_pass | default(omit) }}"
+
+    - name: Desplegar WAR en WebLogic
+      shell: |
+        java weblogic.Deployer \
+          -adminurl t3://{{ dominio }}:7001 \
+          -username {{ wl_user }} \
+          -password {{ wl_pass }} \
+          -deploy /tmp/{{ app_name }}-{{ app_version }}.war \
+          -targets {{ targets }} \
+          -remote \
+          -upload
+      register: deploy_result
+      environment:
+        WL_USER: "{{ wl_user }}"
+        WL_PASS: "{{ wl_pass }}"
+      ignore_errors: true
+
+    - name: Guardar log del despliegue
+      copy:
+        content: |
+          [{{ fecha_deploy }}] Resultado del despliegue:
+          {{ deploy_result.stdout }}
+        dest: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
+        mode: '0644'
+
+    - name: Mostrar resultado en Jenkins
+      debug:
+        msg: "📦 Resultado del despliegue: {{ deploy_result.stdout }}"
+

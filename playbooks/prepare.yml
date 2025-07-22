@@ -1,0 +1,32 @@
+---
+- name: Preparar entorno WebLogic antes del despliegue
+  hosts: all
+  become: false
+  vars_files:
+    - vars.yml
+
+  tasks:
+
+    - name: Verificar si el puerto 7001 está abierto (AdminServer)
+      wait_for:
+        port: 7001
+        state: started
+        timeout: 30
+
+    - name: Crear carpeta temporal para el despliegue si no existe
+      file:
+        path: "/opt/deploy/{{ app_name }}"
+        state: directory
+        mode: '0755'
+
+    - name: Limpiar carpeta de despliegue anterior
+      file:
+        path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
+        state: absent
+
+    - name: Descargar WAR desde Nexus
+      get_url:
+        url: "{{ nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
+        dest: "/opt/deploy/{{ app_name }}/"
+        mode: '0644'
+
