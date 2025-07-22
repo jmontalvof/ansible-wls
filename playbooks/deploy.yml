@@ -69,6 +69,10 @@
         WL_PASS: "{{ wl_pass }}"
       ignore_errors: true
 
+    - name: Mostrar resultado del despliegue
+      debug:
+        var: deploy_result.stdout
+
     - name: Guardar log del despliegue
       copy:
         content: |
