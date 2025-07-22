@@ -2,68 +2,71 @@
 - name: Preparar entorno WebLogic antes del despliegue
   hosts: all
   become: false
-  vars_files:
-    - vars/{{ app_name }}.yml
+  vars:
+    war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
 
   tasks:
 
-    - name: Verificar si el puerto 7001 está abierto (AdminServer)
+    - name: Definir nombre de aplicación
+      set_fact:
+        app_name: "{{ app_name }}"
+        app_version: "{{ app_version }}"
+
+    - name: Incluir variables específicas de la app
+      include_vars:
+        file: "vars/{{ app_name }}.yml"
+        name: app_vars
+
+    - name: Verificar puerto 7001 (AdminServer)
       wait_for:
         port: 7001
         state: started
         timeout: 30
 
-    - name: Crear carpeta temporal para el despliegue si no existe
+    - name: Crear carpeta de despliegue si no existe
       file:
         path: "/opt/deploy/{{ app_name }}"
         state: directory
         mode: '0755'
 
-    - name: Definir ruta completa del WAR
-      set_fact:
-        war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
-
-    - name: Limpiar WAR previo si existe
+    - name: Eliminar WAR previo si existe
       file:
         path: "{{ war_path }}"
         state: absent
 
     - name: Descargar WAR desde Nexus
       get_url:
-        url: "{{ nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
+        url: "{{ app_vars.nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
         dest: "{{ war_path }}"
         mode: '0644'
-        url_username: "{{ nexus_user }}"
-        url_password: "{{ nexus_pass }}"
+        url_username: "{{ lookup('env', 'NEXUS_USER') }}"
+        url_password: "{{ lookup('env', 'NEXUS_PASS') }}"
         use_netrc: false
 
-    - name: Obtener hash SHA256 real del WAR
+    - name: Obtener hash SHA256 del WAR
       command: "sha256sum {{ war_path }}"
       register: war_hash_result
       changed_when: false
 
-    - name: Verificar que el hash SHA256 coincide con el esperado
+    - name: Verificar hash del WAR con el esperado
       assert:
         that:
-          - "war_hash_result.stdout.split()[0] == expected_sha256"
-        fail_msg: "❌ Hash del WAR no coincide: archivo corrupto o modificado"
-        success_msg: "✅ Hash verificado correctamente: archivo íntegro"
+          - "war_hash_result.stdout.split()[0] == app_vars.expected_sha256"
+        fail_msg: "❌ El WAR descargado no coincide con el hash esperado"
+        success_msg: "✅ Integridad confirmada vía SHA256"
 
     - name: Guardar log de preparación
       copy:
         content: |
           [{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}] Preparación de entorno WebLogic:
-          Dominio: {{ dominio }}
-          Puerto 7001 verificado.
-          Carpeta de despliegue: /opt/deploy/{{ app_name }}
-          WAR descargado: {{ war_path }}
+          App: {{ app_name }} v{{ app_version }}
+          WAR: {{ war_path }}
           Hash actual: {{ war_hash_result.stdout.split()[0] }}
-          Hash esperado: {{ expected_sha256 }}
-          Integridad confirmada: {{ war_hash_result.stdout.split()[0] == expected_sha256 }}
+          Hash esperado: {{ app_vars.expected_sha256 }}
         dest: "/opt/logs/prepare_{{ app_name }}_{{ app_version }}.log"
         mode: '0644'
 
-    - name: Traer log de preparación al workspace Jenkins
+    - name: Traer log al workspace Jenkins
       fetch:
         src: "/opt/logs/prepare_{{ app_name }}_{{ app_version }}.log"
         dest: "logs/"
