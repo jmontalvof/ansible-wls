@@ -17,9 +17,9 @@ pipeline {
       steps {
         sshagent(['clave-jenkins']) {
           sh """
-            ansible-playbook -vvv -i inventory/${params.ENTORNO}.yml playbooks/prepare.yml \\
-              --extra-vars @vars/${params.APP_NAME}.yml \\
-              --extra-vars "app_name=${params.APP_NAME} app_version=${params.APP_VERSION} nexus_url=${NEXUS_URL}"
+            ansible-playbook -vvv -i inventory/${params.ENTORNO}.yml playbooks/prepare.yml \
+              --extra-vars @vars/${params.APP_NAME}.yml \
+              --extra-vars 'app_name=${params.APP_NAME} app_version=${params.APP_VERSION} nexus_url=${NEXUS_URL}'
           """
         }
       }
@@ -33,11 +33,11 @@ pipeline {
             usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')
           ]) {
             sh """
-              ansible-playbook -vvv -i inventory/${params.ENTORNO}.yml playbooks/deploy.yml \\
-                --extra-vars @vars/${params.APP_NAME}.yml \\
-                --extra-vars "wl_user=${WL_USER} wl_pass=${WL_PASS} \\
-                              app_name=${params.APP_NAME} app_version=${params.APP_VERSION} \\
-                              nexus_url=${NEXUS_URL} nexus_user=${NEXUS_USER} nexus_pass=${NEXUS_PASS}"
+              ansible-playbook -vvv -i inventory/${params.ENTORNO}.yml playbooks/deploy.yml \
+                --extra-vars @vars/${params.APP_NAME}.yml \
+                --extra-vars 'wl_user=${WL_USER} wl_pass=${WL_PASS} \
+                              app_name=${params.APP_NAME} app_version=${params.APP_VERSION} \
+                              nexus_url=${NEXUS_URL} nexus_user=${NEXUS_USER} nexus_pass=${NEXUS_PASS}'
             """
           }
         }
@@ -48,7 +48,7 @@ pipeline {
       steps {
         sshagent(['clave-jenkins']) {
           sh """
-            ansible-playbook -vvv -i inventory/${params.ENTORNO}.yml playbooks/postdeploy.yml \\
+            ansible-playbook -vvv -i inventory/${params.ENTORNO}.yml playbooks/postdeploy.yml \
               --extra-vars @vars/${params.APP_NAME}.yml
           """
         }
