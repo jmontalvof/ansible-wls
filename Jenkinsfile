@@ -24,23 +24,28 @@ pipeline {
       }
     }
 
-    stage('DEPLOY') {
-      steps {
-        sshagent(['clave-jenkins']) {
-          withCredentials([
-            usernamePassword(credentialsId: 'weblogic-user', usernameVariable: 'WL_USER', passwordVariable: 'WL_PASS'),
-            usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')
-          ]) {
-            sh """
-              ansible-playbook -vvv -i inventory/${params.ENTORNO}.yml playbooks/deploy.yml \
-                --extra-vars 'wl_user=${WL_USER} wl_pass=${WL_PASS} \
-                              app_name=${params.APP_NAME} app_version=${params.APP_VERSION} \
-                              nexus_url=${NEXUS_URL} nexus_user=${NEXUS_USER} nexus_pass=${NEXUS_PASS}'
-            """
-          }
-        }
+stage('DEPLOY') {
+  steps {
+    sshagent(['clave-jenkins']) {
+      withCredentials([
+        usernamePassword(credentialsId: 'weblogic-user', usernameVariable: 'WL_USER', passwordVariable: 'WL_PASS'),
+        usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')
+      ]) {
+        // Exporta al entorno para que lookup() lo detecte
+        env.WL_USER = WL_USER
+        env.WL_PASS = WL_PASS
+        env.NEXUS_USER = NEXUS_USER
+        env.NEXUS_PASS = NEXUS_PASS
+
+        sh """
+          ansible-playbook -vvv -i inventory/${params.ENTORNO}.yml playbooks/deploy.yml \
+            --extra-vars 'app_name=${params.APP_NAME} app_version=${params.APP_VERSION}'
+        """
       }
     }
+  }
+}
+
 
     stage('POST') {
       steps {
