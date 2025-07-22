@@ -11,7 +11,6 @@ pipeline {
     NEXUS_URL = "http://192.168.1.131:8081/repository/maven-releases"
   }
 
-  stages {
 
     stage('PREPARACIÓN') {
       steps {
@@ -32,10 +31,10 @@ pipeline {
              usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')
          ]) {
         // Exporta al entorno para que lookup() lo detecte
-        env.WL_USER = WL_USER
-        env.WL_PASS = WL_PASS
-        env.NEXUS_USER = NEXUS_USER
-        env.NEXUS_PASS = NEXUS_PASS
+            env.WL_USER = WL_USER
+            env.WL_PASS = WL_PASS
+            env.NEXUS_USER = NEXUS_USER
+            env.NEXUS_PASS = NEXUS_PASS
 
         sh """
           ansible-playbook -vvv -i inventory/${params.ENTORNO}.yml playbooks/deploy.yml \
