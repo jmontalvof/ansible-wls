@@ -3,39 +3,61 @@
   hosts: all
   become: false
   vars_files:
-    - pedidos-api.yml
+    - vars/{{ app_name }}.yml
 
   tasks:
 
-    - name: Esperar que la app esté levantada
+    - name: Definir fecha de verificación
+      set_fact:
+        fecha_verificacion: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+
+    - name: Esperar que la app esté levantada y accesible
       uri:
         url: "http://{{ dominio }}:7001/{{ app_name }}/"
         method: GET
-        return_content: no
+        return_content: yes
         status_code: 200
+        timeout: 10
       register: app_check
       retries: 5
-      delay: 10
+      delay: 15
       until: app_check.status == 200
+
+    - name: Extraer tiempo de respuesta de la petición
+      set_fact:
+        tiempo_respuesta_ms: "{{ (app_check.elapsed * 1000) | round(0) }}"
+
+    - name: Verificar que la app respondió rápido
+      assert:
+        that:
+          - tiempo_respuesta_ms < 5000
+        fail_msg: "⚠️ La app respondió en más de 5 segundos ({{ tiempo_respuesta_ms }}ms)"
+        success_msg: "✅ Tiempo de respuesta aceptable: {{ tiempo_respuesta_ms }}ms"
 
     - name: Mostrar mensaje final
       debug:
-        msg: "✅ Despliegue de {{ app_name }} versión {{ app_version }} verificado con éxito en {{ dominio }}"
+        msg:
+          - "📡 Verificación WebLogic completada"
+          - "🔗 URL: http://{{ dominio }}:7001/{{ app_name }}/"
+          - "📦 App: {{ app_name }} v{{ app_version }}"
+          - "📈 Código HTTP: {{ app_check.status }}"
+          - "⏱️ Tiempo de respuesta: {{ tiempo_respuesta_ms }} ms"
 
     - name: Guardar log de verificación
       copy:
         content: |
-           [{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}] Verificación post-deploy:
-            Aplicación: {{ app_name }} v{{ app_version }}
-            URL: http://{{ dominio }}:7001/{{ app_name }}/
-            Código HTTP: {{ app_check.status }}
-        dest: "/opt/logs/verify_{{ app_name }}_{{ app_version }}.log"
+          [{{ fecha_verificacion }}] Resultado post-deploy:
+          Aplicación: {{ app_name }} v{{ app_version }}
+          Dominio: {{ dominio }}
+          URL: http://{{ dominio }}:7001/{{ app_name }}/
+          Código HTTP: {{ app_check.status }}
+          Tiempo de respuesta: {{ tiempo_respuesta_ms }} ms
+          Contenido HTML (primeros 200 chars): {{ app_check.content[:200] | default('Sin contenido') }}
+        dest: "/opt/logs/verify_{{ app_name }}_{{ fecha_verificacion }}.log"
         mode: '0644'
 
-    - name: Traer log al workspace Jenkins
+    - name: Traer log de verificación al workspace Jenkins
       fetch:
-        src: "/opt/logs/verify_{{ app_name }}_{{ app_version }}.log"
+        src: "/opt/logs/verify_{{ app_name }}_{{ fecha_verificacion }}.log"
         dest: "logs/"
         flat: yes
-
-

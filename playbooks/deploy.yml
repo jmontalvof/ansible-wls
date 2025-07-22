@@ -36,6 +36,18 @@
         url_password: "{{ nexus_pass }}"
         use_netrc: false
 
+    - name: Obtener hash SHA256 del WAR
+      command: "sha256sum {{ war_path }}"
+      register: war_hash_result
+      changed_when: false
+
+    - name: Verificar hash SHA256 del WAR descargado
+      assert:
+        that:
+          - "war_hash_result.stdout.split()[0] == expected_sha256"
+        fail_msg: "❌ El WAR descargado no coincide con el hash esperado: posible archivo corrupto"
+        success_msg: "✅ Integridad del WAR confirmada con SHA256"
+
     - name: Desplegar WAR en WebLogic
       shell: |
         java weblogic.Deployer \
@@ -55,8 +67,12 @@
     - name: Guardar log del despliegue
       copy:
         content: |
-          [{{ fecha_deploy }}] Resultado del despliegue:
-          {{ deploy_result.stdout }}
+          [{{ fecha_deploy }}] Resultado del despliegue WebLogic:
+          WAR: {{ war_path }}
+          Hash actual: {{ war_hash_result.stdout.split()[0] }}
+          Hash esperado: {{ expected_sha256 }}
+          Integridad: {{ war_hash_result.stdout.split()[0] == expected_sha256 }}
+          Resultado CLI: {{ deploy_result.stdout }}
         dest: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
         mode: '0644'
 
@@ -66,6 +82,9 @@
         dest: "logs/"
         flat: yes
 
-    - name: Mostrar resultado en Jenkins
+    - name: Mostrar resumen en Jenkins
       debug:
-        msg: "📦 Resultado del despliegue: {{ deploy_result.stdout }}"
+        msg:
+          - "📦 WAR desplegado: {{ app_name }} v{{ app_version }}"
+          - "🌐 Dominio: {{ dominio }}"
+          - "🚀 Resultado: {{ deploy_result.stdout }}"
