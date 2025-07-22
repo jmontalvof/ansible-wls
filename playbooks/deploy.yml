@@ -26,7 +26,7 @@
     - name: Descargar WAR desde Nexus
       get_url:
         url: "{{ nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
-        dest: "/tmp/{{ app_name }}-{{ app_version }}.war"
+        dest: "/opt/deploy/pedidos-api/{{ app_name }}-{{ app_version }}.war"
         mode: '0644'
         url_username: "{{ nexus_user }}"
         url_password: "{{ nexus_pass }}"
@@ -38,7 +38,7 @@
           -adminurl t3://{{ dominio }}:7001 \
           -username {{ wl_user }} \
           -password {{ wl_pass }} \
-          -deploy /tmp/{{ app_name }}-{{ app_version }}.war \
+          -deploy /opt/deploy/pedidos-api/{{ app_name }}-{{ app_version }}.war \
           -targets {{ targets }} \
           -remote \
           -upload
