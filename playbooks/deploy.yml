@@ -17,13 +17,20 @@
         state: directory
         mode: '0755'
 
+    - name: Validar credenciales Nexus
+      debug:
+        msg:
+          - "nexus_user: {{ nexus_user }}"
+          - "nexus_pass está definida y tiene longitud > 0: {{ nexus_pass is defined and nexus_pass | length > 0 }}"
+
     - name: Descargar WAR desde Nexus
       get_url:
         url: "{{ nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
         dest: "/tmp/{{ app_name }}-{{ app_version }}.war"
         mode: '0644'
-        url_username: "{{ nexus_user | default(omit) }}"
-        url_password: "{{ nexus_pass | default(omit) }}"
+        url_username: "{{ nexus_user }}"
+        url_password: "{{ nexus_pass }}"
+        use_netrc: false  # 🔐 Evita que se usen credenciales vía archivo .netrc
 
     - name: Desplegar WAR en WebLogic
       shell: |
@@ -52,4 +59,3 @@
     - name: Mostrar resultado en Jenkins
       debug:
         msg: "📦 Resultado del despliegue: {{ deploy_result.stdout }}"
-
