@@ -3,7 +3,7 @@
   hosts: all
   become: false
   vars_files:
-    - vars.yml
+    - pedidos-api.yml
 
   tasks:
 
