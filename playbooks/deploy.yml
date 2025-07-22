@@ -20,8 +20,8 @@
     - name: Validar credenciales Nexus
       debug:
         msg:
-          - "nexus_user: {{ nexus_user }}"
-          - "nexus_pass está definida y tiene longitud > 0: {{ nexus_pass is defined and nexus_pass | length > 0 }}"
+          - "🧩 Usuario Nexus recibido: {{ nexus_user }}"
+          - "🔐 Contraseña definida y con longitud > 0: {{ nexus_pass is defined and nexus_pass | length > 0 }}"
 
     - name: Descargar WAR desde Nexus
       get_url:
@@ -30,7 +30,7 @@
         mode: '0644'
         url_username: "{{ nexus_user }}"
         url_password: "{{ nexus_pass }}"
-        use_netrc: false  # 🔐 Evita que se usen credenciales vía archivo .netrc
+        use_netrc: false
 
     - name: Desplegar WAR en WebLogic
       shell: |
