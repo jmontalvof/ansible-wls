@@ -88,7 +88,7 @@ Entorno: ${params.ENTORNO}
 Revisa los logs en Jenkins para más información.
 
 😬""",
-        to: "tu-correo@dominio.com"
+        to: "jmontalvof@outlook.es"
       )
     }
   }

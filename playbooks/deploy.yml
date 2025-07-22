@@ -56,6 +56,12 @@
         dest: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
         mode: '0644'
 
+    - name: Traer log de despliegue al workspace Jenkins
+      fetch:
+        src: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
+        dest: "logs/"
+        flat: yes
+
     - name: Mostrar resultado en Jenkins
       debug:
         msg: "📦 Resultado del despliegue: {{ deploy_result.stdout }}"
