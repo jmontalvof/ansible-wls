@@ -6,6 +6,13 @@
     - vars/{{ app_name }}.yml
     
   tasks:
+    - name: Mostrar todas las variables clave
+      debug:
+        msg:
+          - "APP_NAME: {{ app_name }}"
+          - "APP_VERSION: {{ app_version }}"
+          - "NEXUS_USER: {{ nexus_user }}"
+          - "NEXUS_PASS definido: {{ nexus_pass is defined and nexus_pass | length > 0 }}"
 
     - name: Verificar si el puerto 7001 está abierto (AdminServer)
       wait_for:
