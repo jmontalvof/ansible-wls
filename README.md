@@ -6,8 +6,18 @@ Este repositorio contiene una estructura modular y automatizada para desplegar a
 
 ## 📦 Estructura del repositorio
 # ansible-wls
-ansible-wls/ ├── inventory/          # Inventarios por entorno (pre, pro, etc.) │   └── pre.yml ├── Jenkinsfile         # Pipeline universal para todas las apps ├── logs/               # Carpeta opcional para almacenar registros de ejecución ├── playbooks/          # Playbooks reutilizables │   ├── prepare.yml │   ├── deploy.yml │   └── postdeploy.yml ├── README.md           # Este documento └── vars/               # Variables por aplicación └── pedidos-api.yml
-
+ansible-wls/
+├── inventory/           # Inventarios por entorno (pre, pro, etc.)
+│   └── pre.yml
+├── Jenkinsfile          # Pipeline universal para todas las apps
+├── logs/                # Carpeta opcional para registros de ejecución
+├── playbooks/           # Playbooks reutilizables
+│   ├── prepare.yml
+│   ├── deploy.yml
+│   └── postdeploy.yml
+├── README.md            # Este documento
+└── vars/                # Variables por aplicación
+    └── pedidos-api.yml
 
 ---
 
@@ -36,17 +46,23 @@ El Jenkinsfile es universal. Sólo necesitas definir variables por app en el arc
 ## 🌐 Estructura recomendada de montaje en WebLogic
 
 Para cada aplicación:
-/opt/ ├── deploy/ │   └── pedidos-api/           # WARs, plantillas, configuraciones ├── logs/ │   └── pedidos-api/           # Logs de ejecución y verificación
+/opt/
+├── deploy/
+│   └── pedidos-api/         # WARs, plantillas, configuraciones específicas
+├── logs/
+│   └── pedidos-api/         # Logs técnicos, respuesta HTTP, trazas de ejecución
 
 Y en la NAS (producción real):
-/export/weblogic_domain/ ├── domains/ ├── deploy/ ├── logs/
 
+/export/weblogic_domain/
+├── domains/                 # Dominios WebLogic centralizados
+├── deploy/                  # Repositorio de artefactos por aplicación
+├── logs/                    # Logs centralizados accesibles por Jenkins / Sysadmin
 
 ---
 
 ## 📚 Ejemplo de configuración por aplicación
 
-```yaml
 # vars/pedidos-api.yml
 
 app_name: pedidos-api
