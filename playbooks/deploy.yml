@@ -2,10 +2,18 @@
 - name: Desplegar aplicación WAR en WebLogic
   hosts: all
   become: false
-  vars_files:
-    - vars/{{ app_name }}.yml
 
   tasks:
+
+    - name: Definir nombre de la aplicación y versión
+      set_fact:
+        app_name: "{{ app_name }}"
+        app_version: "{{ app_version }}"
+
+    - name: Cargar variables de la aplicación
+      include_vars:
+        file: "../vars/{{ app_name }}.yml"
+        name: app_vars
 
     - name: Definir fecha de despliegue
       set_fact:
@@ -17,45 +25,39 @@
         state: directory
         mode: '0755'
 
-    - name: Definir ruta completa del WAR
+    - name: Definir ruta del WAR
       set_fact:
         war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
 
-    - name: Validar credenciales Nexus
-      debug:
-        msg:
-          - "🧩 Usuario Nexus recibido: {{ nexus_user }}"
-          - "🔐 Contraseña definida (>0): {{ nexus_pass is defined and nexus_pass | length > 0 }}"
-
     - name: Descargar WAR desde Nexus
       get_url:
-        url: "{{ nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
+        url: "{{ app_vars.nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
         dest: "{{ war_path }}"
         mode: '0644'
-        url_username: "{{ nexus_user }}"
-        url_password: "{{ nexus_pass }}"
+        url_username: "{{ lookup('env', 'NEXUS_USER') }}"
+        url_password: "{{ lookup('env', 'NEXUS_PASS') }}"
         use_netrc: false
 
-    - name: Obtener hash SHA256 del WAR
+    - name: Validar integridad del WAR
       command: "sha256sum {{ war_path }}"
       register: war_hash_result
       changed_when: false
 
-    - name: Verificar hash SHA256 del WAR descargado
+    - name: Verificar hash
       assert:
         that:
-          - "war_hash_result.stdout.split()[0] == expected_sha256"
-        fail_msg: "❌ El WAR descargado no coincide con el hash esperado: posible archivo corrupto"
-        success_msg: "✅ Integridad del WAR confirmada con SHA256"
+          - "war_hash_result.stdout.split()[0] == app_vars.expected_sha256"
+        fail_msg: "❌ Hash incorrecto"
+        success_msg: "✅ Hash correcto"
 
     - name: Desplegar WAR en WebLogic
       shell: |
         java weblogic.Deployer \
-          -adminurl t3://{{ dominio }}:7001 \
+          -adminurl t3://{{ app_vars.dominio }}:7001 \
           -username {{ wl_user }} \
           -password {{ wl_pass }} \
           -deploy {{ war_path }} \
-          -targets {{ targets }} \
+          -targets {{ app_vars.targets }} \
           -remote \
           -upload
       register: deploy_result
@@ -67,24 +69,14 @@
     - name: Guardar log del despliegue
       copy:
         content: |
-          [{{ fecha_deploy }}] Resultado del despliegue WebLogic:
-          WAR: {{ war_path }}
-          Hash actual: {{ war_hash_result.stdout.split()[0] }}
-          Hash esperado: {{ expected_sha256 }}
-          Integridad: {{ war_hash_result.stdout.split()[0] == expected_sha256 }}
-          Resultado CLI: {{ deploy_result.stdout }}
+          [{{ fecha_deploy }}] WAR: {{ war_path }}
+          Hash: {{ war_hash_result.stdout.split()[0] }} vs {{ app_vars.expected_sha256 }}
+          Resultado: {{ deploy_result.stdout }}
         dest: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
         mode: '0644'
 
-    - name: Traer log de despliegue al workspace Jenkins
+    - name: Traer log al workspace Jenkins
       fetch:
         src: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
         dest: "logs/"
         flat: yes
-
-    - name: Mostrar resumen en Jenkins
-      debug:
-        msg:
-          - "📦 WAR desplegado: {{ app_name }} v{{ app_version }}"
-          - "🌐 Dominio: {{ dominio }}"
-          - "🚀 Resultado: {{ deploy_result.stdout }}"

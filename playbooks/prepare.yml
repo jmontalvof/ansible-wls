@@ -14,7 +14,7 @@
 
     - name: Incluir variables específicas de la app
       include_vars:
-        file: "vars/{{ app_name }}.yml"
+        file: "../vars/{{ app_name }}.yml"
         name: app_vars
 
     - name: Verificar puerto 7001 (AdminServer)

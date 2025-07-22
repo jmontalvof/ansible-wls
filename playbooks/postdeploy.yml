@@ -1,19 +1,27 @@
 ---
-- name: Validar despliegue WebLogic y comprobar estado de la app
+- name: Validar despliegue WebLogic y estado de la app
   hosts: all
   become: false
-  vars_files:
-    - vars/{{ app_name }}.yml
 
   tasks:
 
-    - name: Definir fecha de verificación
+    - name: Definir app y versión
+      set_fact:
+        app_name: "{{ app_name }}"
+        app_version: "{{ app_version }}"
+
+    - name: Cargar variables de configuración
+      include_vars:
+        file: "../vars/{{ app_name }}.yml"
+        name: app_vars
+
+    - name: Fecha de verificación
       set_fact:
         fecha_verificacion: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
 
-    - name: Esperar que la app esté levantada y accesible
+    - name: Verificar app levantada
       uri:
-        url: "http://{{ dominio }}:7001/{{ app_name }}/"
+        url: "http://{{ app_vars.dominio }}:7001/{{ app_name }}/"
         method: GET
         return_content: yes
         status_code: 200
@@ -23,40 +31,30 @@
       delay: 15
       until: app_check.status == 200
 
-    - name: Extraer tiempo de respuesta de la petición
+    - name: Medir tiempo de respuesta
       set_fact:
         tiempo_respuesta_ms: "{{ (app_check.elapsed * 1000) | round(0) }}"
 
-    - name: Verificar que la app respondió rápido
+    - name: Validar velocidad de respuesta
       assert:
         that:
           - tiempo_respuesta_ms < 5000
-        fail_msg: "⚠️ La app respondió en más de 5 segundos ({{ tiempo_respuesta_ms }}ms)"
-        success_msg: "✅ Tiempo de respuesta aceptable: {{ tiempo_respuesta_ms }}ms"
+        fail_msg: "⚠️ Tiempo alto: {{ tiempo_respuesta_ms }}ms"
+        success_msg: "✅ Tiempo: {{ tiempo_respuesta_ms }}ms"
 
-    - name: Mostrar mensaje final
-      debug:
-        msg:
-          - "📡 Verificación WebLogic completada"
-          - "🔗 URL: http://{{ dominio }}:7001/{{ app_name }}/"
-          - "📦 App: {{ app_name }} v{{ app_version }}"
-          - "📈 Código HTTP: {{ app_check.status }}"
-          - "⏱️ Tiempo de respuesta: {{ tiempo_respuesta_ms }} ms"
-
-    - name: Guardar log de verificación
+    - name: Guardar log post-deploy
       copy:
         content: |
-          [{{ fecha_verificacion }}] Resultado post-deploy:
-          Aplicación: {{ app_name }} v{{ app_version }}
-          Dominio: {{ dominio }}
-          URL: http://{{ dominio }}:7001/{{ app_name }}/
+          [{{ fecha_verificacion }}] Verificación WebLogic
+          App: {{ app_name }} v{{ app_version }}
+          URL: http://{{ app_vars.dominio }}:7001/{{ app_name }}/
           Código HTTP: {{ app_check.status }}
-          Tiempo de respuesta: {{ tiempo_respuesta_ms }} ms
-          Contenido HTML (primeros 200 chars): {{ app_check.content[:200] | default('Sin contenido') }}
+          Tiempo: {{ tiempo_respuesta_ms }} ms
+          HTML: {{ app_check.content[:200] | default('Sin contenido') }}
         dest: "/opt/logs/verify_{{ app_name }}_{{ fecha_verificacion }}.log"
         mode: '0644'
 
-    - name: Traer log de verificación al workspace Jenkins
+    - name: Traer log al workspace Jenkins
       fetch:
         src: "/opt/logs/verify_{{ app_name }}_{{ fecha_verificacion }}.log"
         dest: "logs/"
