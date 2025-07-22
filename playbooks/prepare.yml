@@ -3,8 +3,8 @@
   hosts: all
   become: false
   vars_files:
-    - ../vars/vars.yml
-
+    - vars/{{ app_name }}.yml
+    
   tasks:
 
     - name: Verificar si el puerto 7001 está abierto (AdminServer)
@@ -19,15 +19,19 @@
         state: directory
         mode: '0755'
 
+    - name: Definir ruta del WAR
+        set_fact:
+          war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
+
     - name: Limpiar carpeta de despliegue anterior
       file:
-        path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
+        path: "{{ war_path }}"
         state: absent
 
     - name: Descargar WAR desde Nexus
       get_url:
         url: "{{ nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
-        dest: "/opt/deploy/{{ app_name }}/"
+        dest: "{{ war_path }}"  
         mode: '0644'
 
     - name: Guardar log de preparación

@@ -22,3 +22,20 @@
       debug:
         msg: "✅ Despliegue de {{ app_name }} versión {{ app_version }} verificado con éxito en {{ dominio }}"
 
+    - name: Guardar log de verificación
+      copy:
+        content: |
+           [{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}] Verificación post-deploy:
+            Aplicación: {{ app_name }} v{{ app_version }}
+            URL: http://{{ dominio }}:7001/{{ app_name }}/
+            Código HTTP: {{ app_check.status }}
+        dest: "/opt/logs/verify_{{ app_name }}_{{ app_version }}.log"
+        mode: '0644'
+
+    - name: Traer log al workspace Jenkins
+      fetch:
+        src: "/opt/logs/verify_{{ app_name }}_{{ app_version }}.log"
+        dest: "logs/"
+        flat: yes
+
+

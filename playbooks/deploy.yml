@@ -17,16 +17,20 @@
         state: directory
         mode: '0755'
 
+    - name: Definir ruta completa del WAR
+      set_fact:
+        war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
+
     - name: Validar credenciales Nexus
       debug:
         msg:
           - "🧩 Usuario Nexus recibido: {{ nexus_user }}"
-          - "🔐 Contraseña definida y con longitud > 0: {{ nexus_pass is defined and nexus_pass | length > 0 }}"
+          - "🔐 Contraseña definida (>0): {{ nexus_pass is defined and nexus_pass | length > 0 }}"
 
     - name: Descargar WAR desde Nexus
       get_url:
         url: "{{ nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
-        dest: "/opt/deploy/pedidos-api/{{ app_name }}-{{ app_version }}.war"
+        dest: "{{ war_path }}"
         mode: '0644'
         url_username: "{{ nexus_user }}"
         url_password: "{{ nexus_pass }}"
@@ -38,7 +42,7 @@
           -adminurl t3://{{ dominio }}:7001 \
           -username {{ wl_user }} \
           -password {{ wl_pass }} \
-          -deploy /opt/deploy/pedidos-api/{{ app_name }}-{{ app_version }}.war \
+          -deploy {{ war_path }} \
           -targets {{ targets }} \
           -remote \
           -upload
