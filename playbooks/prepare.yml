@@ -30,3 +30,19 @@
         dest: "/opt/deploy/{{ app_name }}/"
         mode: '0644'
 
+    - name: Guardar log de preparación
+      copy:
+        content: |
+          [{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}] Preparación de entorno:
+          Puerto 7001 verificado.
+          Carpeta /opt/deploy/{{ app_name }} creada.
+          WAR anterior eliminado.
+          Nuevo WAR descargado: {{ app_name }}-{{ app_version }}.war
+        dest: "/opt/logs/prepare_{{ app_name }}_{{ app_version }}.log"
+        mode: '0644'
+
+    - name: Traer log de preparación al workspace Jenkins
+      fetch:
+        src: "/opt/logs/prepare_{{ app_name }}_{{ app_version }}.log"
+        dest: "logs/"
+        flat: yes

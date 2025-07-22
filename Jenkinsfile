@@ -55,4 +55,41 @@ pipeline {
       }
     }
   }
+  post {
+    success {
+      emailext(
+        subject: "✅ Despliegue exitoso: ${params.APP_NAME} ${params.APP_VERSION} en ${params.ENTORNO}",
+        body: """Hola Jorge,
+
+El pipeline terminó correctamente.
+
+Aplicación: ${params.APP_NAME}
+Versión: ${params.APP_VERSION}
+Entorno: ${params.ENTORNO}
+
+Se adjuntan los logs del despliegue y validación post-deploy.
+
+¡Todo OK! 🎉""",
+        to: "jmontalvof|outlook.es",
+        attachmentsPattern: "logs/deploy_${params.APP_NAME}_*.log,logs/verify_${params.APP_NAME}_*.log"
+      )
+    }
+
+    failure {
+      emailext(
+        subject: "❌ Fallo en el despliegue de ${params.APP_NAME} en ${params.ENTORNO}",
+        body: """Hola Jorge,
+
+El pipeline ha fallado en alguna etapa.
+
+Aplicación: ${params.APP_NAME}
+Entorno: ${params.ENTORNO}
+
+Revisa los logs en Jenkins para más información.
+
+😬""",
+        to: "tu-correo@dominio.com"
+      )
+    }
+  }
 }
