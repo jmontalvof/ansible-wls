@@ -56,10 +56,13 @@
           -adminurl t3://{{ app_vars.dominio }}:7001 \
           -username {{ wl_user }} \
           -password {{ wl_pass }} \
-          -deploy {{ war_path }} \
+          -deploy \
+          -source {{ war_path }} \
           -targets {{ app_vars.targets }} \
           -remote \
-          -upload
+          -upload \
+          -name {{ app_vars.app_name }} \
+          -verbose
       register: deploy_result
       environment:
         WL_USER: "{{ wl_user }}"
