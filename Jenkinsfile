@@ -8,7 +8,7 @@ pipeline {
   }
 
   environment {
-    NEXUS_URL = "http://192.168.1.131:8081/repository/maven-releases2"
+    NEXUS_URL = "http://192.168.1.131:8081/repository/maven-releases"
   }
 
   stages {
