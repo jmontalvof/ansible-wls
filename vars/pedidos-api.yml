@@ -3,3 +3,5 @@ app_name: pedidos-api
 app_version: 1.0.0
 targets: Cluster01   # 👈 Se replica automáticamente
 nexus_url: http://192.168.1.131:8081/repository/maven-releases
+nexus_user: "{{ lookup('env', 'NEXUS_USER') }}"
+nexus_pass: "{{ lookup('env', 'NEXUS_PASS') }}"
