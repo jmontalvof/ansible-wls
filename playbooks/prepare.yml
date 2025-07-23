@@ -2,8 +2,6 @@
 - name: Preparar entorno WebLogic antes del despliegue
   hosts: all
   become: false
-  vars:
-    war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
 
   tasks:
 
@@ -45,15 +43,15 @@
 
     - name: Descargar WAR desde Nexus
       get_url:
-        url: "{{ app_vars.war_url }}"
-        dest: "{{ app_vars.war_path }}"
+        url: "{{ war_url }}"
+        dest: "{{ war_path }}"
         mode: '0644'
         url_username: "{{ app_vars.nexus_user }}"
         url_password: "{{ app_vars.nexus_pass }}"
         use_netrc: false
 
     - name: Obtener hash SHA256 del WAR
-      command: "sha256sum {{ apps_vars.war_path }}"
+      command: "sha256sum {{ war_path }}"
       register: war_hash_result
       changed_when: false
 

@@ -2,14 +2,7 @@ dominio: 192.168.1.143
 app_name: simple-webapp
 app_version: 1.0
 targets: Cluster01
-
 nexus_url: http://192.168.1.131:8081/repository/maven-releases
-group_path: com/jorge/web
 nexus_user: "{{ lookup('env', 'NEXUS_USER') }}"
 nexus_pass: "{{ lookup('env', 'NEXUS_PASS') }}"
-
 expected_sha256: "8077d9158f6052ce20f5b392a11bc8710500c53d84801ac0890c4cd473983d40"
-
-war_file: "{{ app_name }}-{{ app_version }}.war"
-war_path: "/opt/deploy/{{ app_name }}/{{ war_file }}"
-war_url: "{{ nexus_url }}/{{ group_path }}/{{ app_name }}/{{ app_version }}/{{ war_file }}"
