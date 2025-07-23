@@ -22,7 +22,8 @@
     - name: Generar ruta y URL del WAR
       set_fact:
         war_path: "/opt/deploy/{{ app_vars.app_name }}/{{ war_file }}"
-        war_url: "{{ app_vars.nexus_url }}/{{ app_vars.group_path }}/{{ app_vars.app_name }}/{{ app_vars.app_version }}/{{ war_file }}"
+#        war_url: "{{ app_vars.nexus_url }}/{{ app_vars.group_path }}/{{ app_vars.app_name }}/{{ app_vars.app_version }}/{{ war_file }}"
+#        war_url: "{{ app_vars.nexus_url }}/com/empresa/web/{{ app_vars.app_name }}/{{ app_vars.app_version }}/{{ war_file }}"
 
     - name: Verificar puerto 7001 (AdminServer)
       wait_for:
