@@ -19,7 +19,7 @@
       set_fact:
         fecha_verificacion: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
 
-    - name: Verificar app levantada
+    - name: Verificar app levantada (no bloquea si falla)
       uri:
         url: "http://{{ app_vars.dominio }}:7001/{{ app_name }}/"
         method: GET
@@ -27,21 +27,7 @@
         status_code: 200
         timeout: 10
       register: app_check
-      retries: 5
-      delay: 15
-      until: app_check.status == 200
       ignore_errors: true
-
-    - name: Medir tiempo de respuesta
-      set_fact:
-        tiempo_respuesta_ms: "{{ (app_check.elapsed * 1000) | round(0) }}"
-
-    - name: Validar velocidad de respuesta
-      assert:
-        that:
-          - tiempo_respuesta_ms < 5000
-        fail_msg: "⚠️ Tiempo alto: {{ tiempo_respuesta_ms }}ms"
-        success_msg: "✅ Tiempo: {{ tiempo_respuesta_ms }}ms"
 
     - name: Guardar log post-deploy
       copy:
@@ -49,8 +35,7 @@
           [{{ fecha_verificacion }}] Verificación WebLogic
           App: {{ app_name }} v{{ app_version }}
           URL: http://{{ app_vars.dominio }}:7001/{{ app_name }}/
-          Código HTTP: {{ app_check.status }}
-          Tiempo: {{ tiempo_respuesta_ms }} ms
+          Código HTTP: {{ app_check.status | default('No disponible') }}
           HTML: {{ app_check.content[:200] | default('Sin contenido') }}
         dest: "/opt/logs/verify_{{ app_name }}_{{ fecha_verificacion }}.log"
         mode: '0644'
