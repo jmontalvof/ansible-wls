@@ -16,9 +16,13 @@
       include_vars:
         file: "../vars/{{ app_name }}.yml"
         name: app_vars
+
+    - name: Generar nombre de archivo WAR
+        set_fact:
+          war_file: "{{ app_vars.app_name }}-{{ app_vars.app_version }}.war"
+
     - name: Generar variables dinámicas del WAR
       set_fact:
-        war_file: "{{ app_vars.app_name }}-{{ app_vars.app_version }}.war"
         war_path: "/opt/deploy/{{ app_vars.app_name }}/{{ war_file }}"
         war_url: "{{ app_vars.nexus_url }}/{{ app_vars.group_path }}/{{ app_vars.app_name }}/{{ app_vars.app_version }}/{{ war_file }}"
 
