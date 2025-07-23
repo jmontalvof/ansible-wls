@@ -44,8 +44,8 @@
 
     - name: Descargar WAR desde Nexus
       get_url:
-        url: "{{ war_url }}"
-        dest: "{{ war_path }}"
+        url: "{{ app_vars.war_url }}"
+        dest: "{{ app_vars.war_path }}"
         mode: '0644'
         url_username: "{{ app_vars.nexus_user }}"
         url_password: "{{ app_vars.nexus_pass }}"
