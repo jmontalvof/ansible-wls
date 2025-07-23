@@ -64,8 +64,6 @@
           -remote \
           -verbose
       register: deploy_result
-      args:
-        chdir: "{{ playbook_dir }}"
       changed_when: "'deploy completed' in deploy_result.stdout"
       ignore_errors: false
 
