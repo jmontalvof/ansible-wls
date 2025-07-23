@@ -64,7 +64,7 @@ pipeline {
 
   post {
     always {
-      archiveArtifacts artifacts: 'logs/*.log', fingerprint: true
+      archiveArtifacts artifacts: 'playbooks/logs/*.log', fingerprint: true
     }
   }
 }
