@@ -52,22 +52,22 @@
 
     - name: Desplegar WAR en WebLogic
       shell: |
-        java weblogic.Deployer \
-          -adminurl t3://{{ app_vars.dominio }}:7001 \
-          -username {{ wl_user }} \
-          -password {{ wl_pass }} \
-          -deploy \
-          -source {{ war_path }} \
-          -targets {{ app_vars.targets }} \
-          -remote \
-          -upload \
-          -name {{ app_vars.app_name }} \
+        java -cp /home/jorge/Oracle/Middleware/Oracle_Home/wlserver/server/lib/weblogic.jar weblogic.Deployer
+          -adminurl t3://{{ app_vars.dominio }}:7001
+          -username {{ wl_user }}
+          -password {{ wl_pass }}
+          -deploy
+          -source {{ war_path }}
+          -targets {{ app_vars.targets }}
+          -name {{ app_vars.app_name }}
+          -upload
+          -remote
           -verbose
-      register: deploy_result
-      environment:
-        WL_USER: "{{ wl_user }}"
-        WL_PASS: "{{ wl_pass }}"
-      ignore_errors: true
+    register: deploy_result
+    args:
+      chdir: "{{ playbook_dir }}"
+    changed_when: "'deploy completed' in deploy_result.stdout"
+    ignore_errors: false
 
     - name: Mostrar resultado del despliegue
       debug:
