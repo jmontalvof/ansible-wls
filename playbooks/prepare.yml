@@ -18,8 +18,8 @@
         name: app_vars
 
     - name: Generar nombre de archivo WAR
-        set_fact:
-          war_file: "{{ app_vars.app_name }}-{{ app_vars.app_version }}.war"
+      set_fact:
+        war_file: "{{ app_vars.app_name }}-{{ app_vars.app_version }}.war"
 
     - name: Generar variables dinámicas del WAR
       set_fact:
