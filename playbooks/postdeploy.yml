@@ -5,11 +5,6 @@
 
   tasks:
 
-    - name: Definir app y versión
-      set_fact:
-        app_name: "{{ app_name }}"
-        app_version: "{{ app_version }}"
-
     - name: Cargar variables de configuración
       include_vars:
         file: "../vars/{{ app_name }}.yml"
@@ -19,9 +14,9 @@
       set_fact:
         fecha_verificacion: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
 
-    - name: Verificar app levantada
+    - name: Verificar que la aplicación está levantada (HTTP 200)
       uri:
-        url: "http://{{ app_vars.dominio }}:7001/{{ app_name }}/"
+        url: "http://{{ app_vars.dominio }}:7001/{{ app_vars.app_name }}/"
         method: GET
         return_content: yes
         status_code: 200
@@ -39,23 +34,24 @@
       assert:
         that:
           - tiempo_respuesta_ms < 5000
-        fail_msg: "⚠️ Tiempo alto: {{ tiempo_respuesta_ms }}ms"
-        success_msg: "✅ Tiempo: {{ tiempo_respuesta_ms }}ms"
+        fail_msg: "⚠️ Tiempo alto: {{ tiempo_respuesta_ms }} ms"
+        success_msg: "✅ Tiempo de respuesta: {{ tiempo_respuesta_ms }} ms"
 
     - name: Guardar log post-deploy
       copy:
         content: |
-          [{{ fecha_verificacion }}] Verificación WebLogic
-          App: {{ app_name }} v{{ app_version }}
-          URL: http://{{ app_vars.dominio }}:7001/{{ app_name }}/
+          [{{ fecha_verificacion }}] Verificación post-deploy WebLogic
+          App: {{ app_vars.app_name }} v{{ app_vars.app_version }}
+          URL: http://{{ app_vars.dominio }}:7001/{{ app_vars.app_name }}/
           Código HTTP: {{ app_check.status }}
-          Tiempo: {{ tiempo_respuesta_ms }} ms
-          HTML: {{ app_check.content[:200] | default('Sin contenido') }}
-        dest: "/opt/logs/verify_{{ app_name }}_{{ fecha_verificacion }}.log"
+          Tiempo de respuesta: {{ tiempo_respuesta_ms }} ms
+          HTML inicial: {{ app_check.content[:200] | regex_replace('\n', ' ') | default('Sin contenido') }}
+        dest: "/opt/logs/verify_{{ app_vars.app_name }}_{{ fecha_verificacion }}.log"
         mode: '0644'
 
     - name: Traer log al workspace Jenkins
       fetch:
-        src: "/opt/logs/verify_{{ app_name }}_{{ fecha_verificacion }}.log"
+        src: "/opt/logs/verify_{{ app_vars.app_name }}_{{ fecha_verificacion }}.log"
         dest: "logs/"
         flat: yes
+
