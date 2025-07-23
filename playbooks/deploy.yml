@@ -65,7 +65,7 @@
           -verbose
       register: deploy_result
       environment:
-        PATH: "/home/jenkins/jdk-11.0.28/bin:{{ ansible_env.PATH }}"
+        PATH: "/opt/java11/bin:{{ ansible_env.PATH }}"
       changed_when: "'deploy completed' in deploy_result.stdout"
       ignore_errors: false
 
