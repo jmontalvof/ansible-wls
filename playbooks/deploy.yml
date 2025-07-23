@@ -5,16 +5,15 @@
 
   tasks:
 
+    - name: Definir nombre de la aplicación y versión
+      set_fact:
+        app_name: "{{ app_name }}"
+        app_version: "{{ app_version }}"
+
     - name: Cargar variables de la aplicación
       include_vars:
         file: "../vars/{{ app_name }}.yml"
         name: app_vars
-
-    - name: Definir nombre del archivo WAR y ruta
-      set_fact:
-        war_file: "{{ app_vars.app_name }}-{{ app_vars.app_version }}.war"
-        war_path: "/opt/deploy/{{ app_vars.app_name }}/{{ app_vars.app_name }}-{{ app_vars.app_version }}.war"
-        war_url: "{{ app_vars.nexus_url }}/{{ app_vars.group_path }}/{{ app_vars.app_name }}/{{ app_vars.app_version }}/{{ app_vars.app_name }}-{{ app_vars.app_version }}.war"
 
     - name: Definir fecha de despliegue
       set_fact:
@@ -26,13 +25,17 @@
         state: directory
         mode: '0755'
 
+    - name: Definir ruta del WAR
+      set_fact:
+        war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
+
     - name: Descargar WAR desde Nexus
       get_url:
-        url: "{{ war_url }}"
+        url: "{{ app_vars.nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
         dest: "{{ war_path }}"
         mode: '0644'
-        url_username: "{{ app_vars.nexus_user }}"
-        url_password: "{{ app_vars.nexus_pass }}"
+        url_username: "{{ lookup('env', 'NEXUS_USER') }}"
+        url_password: "{{ lookup('env', 'NEXUS_PASS') }}"
         use_netrc: false
 
     - name: Validar integridad del WAR
@@ -61,28 +64,26 @@
           -name {{ app_vars.app_name }} \
           -verbose
       register: deploy_result
+      environment:
+        WL_USER: "{{ wl_user }}"
+        WL_PASS: "{{ wl_pass }}"
       ignore_errors: true
 
     - name: Mostrar resultado del despliegue
       debug:
-        var: deploy_result.stdout_lines
+        var: deploy_result.stdout
 
     - name: Guardar log del despliegue
       copy:
         content: |
-          [{{ fecha_deploy }}] Despliegue WebLogic:
-          App: {{ app_vars.app_name }} v{{ app_vars.app_version }}
-          WAR: {{ war_path }}
-          Hash actual: {{ war_hash_result.stdout.split()[0] }}
-          Hash esperado: {{ app_vars.expected_sha256 }}
-          Resultado:
-          {{ deploy_result.stdout }}
-        dest: "/opt/logs/deploy_{{ app_vars.app_name }}_{{ fecha_deploy }}.log"
+          [{{ fecha_deploy }}] WAR: {{ war_path }}
+          Hash: {{ war_hash_result.stdout.split()[0] }} vs {{ app_vars.expected_sha256 }}
+          Resultado: {{ deploy_result.stdout }}
+        dest: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
         mode: '0644'
 
     - name: Traer log al workspace Jenkins
       fetch:
-        src: "/opt/logs/deploy_{{ app_vars.app_name }}_{{ fecha_deploy }}.log"
+        src: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
         dest: "logs/"
         flat: yes
-

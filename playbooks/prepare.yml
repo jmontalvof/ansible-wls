@@ -2,15 +2,22 @@
 - name: Preparar entorno WebLogic antes del despliegue
   hosts: all
   become: false
+  vars:
+    war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
 
   tasks:
+
+    - name: Definir nombre de aplicación
+      set_fact:
+        app_name: "{{ app_name }}"
+        app_version: "{{ app_version }}"
 
     - name: Incluir variables específicas de la app
       include_vars:
         file: "../vars/{{ app_name }}.yml"
         name: app_vars
 
-    - name: Definir nombre del archivo WAR
+    - name: Generar nombre de archivo WAR
       set_fact:
         war_file: "{{ app_vars.app_name }}-{{ app_vars.app_version }}.war"
 
@@ -27,7 +34,7 @@
 
     - name: Crear carpeta de despliegue si no existe
       file:
-        path: "/opt/deploy/{{ app_vars.app_name }}"
+        path: "/opt/deploy/{{ app_name }}"
         state: directory
         mode: '0755'
 
@@ -38,15 +45,15 @@
 
     - name: Descargar WAR desde Nexus
       get_url:
-        url: "{{ war_url }}"
-        dest: "{{ war_path }}"
+        url: "{{ app_vars.war_url }}"
+        dest: "{{ app_vars.war_path }}"
         mode: '0644'
         url_username: "{{ app_vars.nexus_user }}"
         url_password: "{{ app_vars.nexus_pass }}"
         use_netrc: false
 
     - name: Obtener hash SHA256 del WAR
-      command: "sha256sum {{ war_path }}"
+      command: "sha256sum {{ apps_vars.war_path }}"
       register: war_hash_result
       changed_when: false
 
@@ -68,16 +75,15 @@
       copy:
         content: |
           [{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}] Preparación de entorno WebLogic:
-          App: {{ app_vars.app_name }} v{{ app_vars.app_version }}
+          App: {{ app_name }} v{{ app_version }}
           WAR: {{ war_path }}
           Hash actual: {{ war_hash_result.stdout.split()[0] }}
           Hash esperado: {{ app_vars.expected_sha256 }}
-        dest: "/opt/logs/prepare_{{ app_vars.app_name }}_{{ app_vars.app_version }}.log"
+        dest: "/opt/logs/prepare_{{ app_name }}_{{ app_version }}.log"
         mode: '0644'
 
     - name: Traer log al workspace Jenkins
       fetch:
-        src: "/opt/logs/prepare_{{ app_vars.app_name }}_{{ app_vars.app_version }}.log"
+        src: "/opt/logs/prepare_{{ app_name }}_{{ app_version }}.log"
         dest: "logs/"
         flat: yes
-
