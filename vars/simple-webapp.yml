@@ -1,6 +1,6 @@
 dominio: 192.168.1.143
 app_name: simple-webapp
-app_version: 1.0.0
+app_version: 1.0
 targets: Cluster01
 
 nexus_url: http://192.168.1.131:8081/repository/maven-releases
