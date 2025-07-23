@@ -24,10 +24,6 @@
         war_path: "/opt/deploy/{{ app_vars.app_name }}/{{ war_file }}"
         war_url: "http://192.168.1.131:8081/repository/maven-releases/com/empresa/web/{{ app_vars.app_name }}/{{ app_vars.app_version }}/{{ war_file }}"
 
-#        war_path: "/opt/deploy/{{ app_vars.app_name }}/{{ war_file }}"
-#        war_url: "{{ app_vars.nexus_url }}/{{ app_vars.group_path }}/{{ app_vars.app_name }}/{{ app_vars.app_version }}/{{ war_file }}"
-#        war_url: "{{ app_vars.nexus_url }}/com/empresa/web/{{ app_vars.app_name }}/{{ app_vars.app_version }}/{{ war_file }}"
-
     - name: Verificar puerto 7001 (AdminServer)
       wait_for:
         port: 7001
@@ -36,7 +32,7 @@
 
     - name: Crear carpeta de despliegue si no existe
       file:
-        path: "/opt/deploy/{{ app_name }}"
+        path: "/opt/deploy/{{ app_vars.app_name }}"
         state: directory
         mode: '0755'
 
@@ -47,8 +43,8 @@
 
     - name: Descargar WAR desde Nexus
       get_url:
-        url: "{{ app_vars.war_url }}"
-        dest: "{{ app_vars.war_path }}"
+        url: "{{ war_url }}"
+        dest: "{{ war_path }}"
         mode: '0644'
         url_username: "{{ app_vars.nexus_user }}"
         url_password: "{{ app_vars.nexus_pass }}"
