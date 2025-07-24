@@ -61,7 +61,6 @@
           -targets {{ app_vars.targets }} \
           -name {{ app_vars.app_name }} \
           -stage nostage \
-#          -remote \
           -verbose
       register: deploy_result
       environment:
