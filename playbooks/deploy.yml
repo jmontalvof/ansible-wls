@@ -60,7 +60,8 @@
           -source {{ war_path }} \
           -targets {{ app_vars.targets }} \
           -name {{ app_vars.app_name }} \
-          -stage nostage \
+          -update \
+          -remote \
           -verbose
       register: deploy_result
       environment:
