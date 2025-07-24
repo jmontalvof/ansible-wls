@@ -25,9 +25,10 @@
         state: directory
         mode: '0755'
 
-    - name: Definir ruta del WAR
+    - name: Definir ruta local y compartida del WAR
       set_fact:
         war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
+        shared_war_path: "/mnt/weblogic_domains/apps/{{ app_name }}-{{ app_version }}.war"
 
     - name: Descargar WAR desde Nexus
       get_url:
@@ -37,6 +38,12 @@
         url_username: "{{ lookup('env', 'NEXUS_USER') }}"
         url_password: "{{ lookup('env', 'NEXUS_PASS') }}"
         use_netrc: false
+
+    - name: Copiar WAR al NFS compartido
+      copy:
+        src: "{{ war_path }}"
+        dest: "{{ shared_war_path }}"
+        mode: '0644'
 
     - name: Validar integridad del WAR
       command: "sha256sum {{ war_path }}"
@@ -50,23 +57,35 @@
         fail_msg: "❌ Hash incorrecto"
         success_msg: "✅ Hash correcto"
 
-    - name: Desplegar WAR en WebLogic
+    - name: Comprobar si la app ya está desplegada
       shell: |
         java -cp /home/jorge/Oracle/Middleware/Oracle_Home/wlserver/server/lib/weblogic.jar weblogic.Deployer \
           -adminurl t3://{{ app_vars.dominio }}:7001 \
           -username {{ wl_user }} \
           -password {{ wl_pass }} \
-          -deploy \
-          -source {{ war_path }} \
-          -targets {{ app_vars.targets }} \
+          -listapps | grep -i "^{{ app_vars.app_name }}$"
+      register: app_status
+      ignore_errors: true
+
+    - name: Desplegar o actualizar WAR
+      shell: |
+        java -cp /home/jorge/Oracle/Middleware/Oracle_Home/wlserver/server/lib/weblogic.jar weblogic.Deployer \
+          -adminurl t3://{{ app_vars.dominio }}:7001 \
+          -username {{ wl_user }} \
+          -password {{ wl_pass }} \
+          {% if app_status.rc == 0 %}
+          -update
+          {% else %}
+          -deploy -targets {{ app_vars.targets }}
+          {% endif %} \
           -name {{ app_vars.app_name }} \
-          -update \
-          -remote \
+          -source {{ shared_war_path }} \
+          -stage nostage \
           -verbose
       register: deploy_result
       environment:
         PATH: "/opt/java11/bin:{{ ansible_env.PATH }}"
-      changed_when: "'deploy completed' in deploy_result.stdout"
+      changed_when: "'completed' in deploy_result.stdout"
       ignore_errors: false
 
     - name: Mostrar resultado del despliegue
@@ -76,7 +95,7 @@
     - name: Guardar log del despliegue
       copy:
         content: |
-          [{{ fecha_deploy }}] WAR: {{ war_path }}
+          [{{ fecha_deploy }}] WAR: {{ shared_war_path }}
           Hash: {{ war_hash_result.stdout.split()[0] }} vs {{ app_vars.expected_sha256 }}
           Resultado: {{ deploy_result.stdout }}
         dest: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
@@ -87,3 +106,4 @@
         src: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
         dest: "logs/"
         flat: yes
+
