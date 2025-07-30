@@ -1,29 +1,8 @@
----
-# Configuración de la aplicación
-app_config:
-  name: simple-webapp
-  version: 1.0
-  context_root: /simple-webapp
-  nexus_path: com/empresa/web
-
-# Configuración WebLogic
-weblogic_config:
-  admin_url: t3://192.168.1.143:7001
-  targets: Cluster01
-  deploy_timeout: 300
-
-# Configuración Nexus
-nexus_config:
-  url: http://192.168.1.131:8081/repository/maven-releases
-  credentials:
-    username: "{{ lookup('env', 'NEXUS_USER') }}"
-    password: "{{ lookup('env', 'NEXUS_PASS') }}"
-
-# Verificación de integridad
-security:
-  expected_sha256: "f9f88efecc00eb35d55950e5aa5bf2b1293394bbdfea30adbd1bb8f1bee41da8"
-
-# Rutas
-paths:
-  deploy_dir: /opt/deploy
-  logs_dir: /opt/logs
+dominio: 192.168.1.143
+app_name: simple-webapp
+app_version: 1.0
+targets: Cluster01
+nexus_url: http://192.168.1.131:8081/repository/maven-releases
+nexus_user: "{{ lookup('env', 'NEXUS_USER') }}"
+nexus_pass: "{{ lookup('env', 'NEXUS_PASS') }}"
+expected_sha256: "8077d9158f6052ce20f5b392a11bc8710500c53d84801ac0890c4cd473983d40"
