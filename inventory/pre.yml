@@ -1,9 +1,7 @@
----
 weblogic_servers:
   hosts:
     weblogic01:
       ansible_host: 192.168.1.143
       ansible_user: jorge
-      ansible_connection: ssh
-      weblogic_home: /home/jorge/Oracle/Middleware/Oracle_Home
-      java_home: /opt/java11
+      ansible_ssh_pass: admin  # Solo para pruebas, no seguro para producción
+      ansible_become_pass: nexus12345  # Si necesitas sudo
