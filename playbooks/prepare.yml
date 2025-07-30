@@ -1,87 +1,84 @@
 ---
-- name: Preparar entorno WebLogic antes del despliegue
-  hosts: all
-  become: false
+- name: Preparar entorno para despliegue WebLogic
+  hosts: weblogic_servers
+  gather_facts: true
+  vars_files:
+    - "../vars/{{ app_name }}.yml"
 
-  tasks:
-
-    - name: Definir nombre de aplicación
-      set_fact:
-        app_name: "{{ app_name }}"
-        app_version: "{{ app_version }}"
-
-    - name: Incluir variables específicas de la app
-      include_vars:
-        file: "../vars/{{ app_name }}.yml"
-        name: app_vars
-
-    - name: Generar nombre de archivo WAR
-      set_fact:
-        war_file: "{{ app_vars.app_name }}-{{ app_vars.app_version }}.war"
-
-    - name: Generar ruta y URL del WAR
-      set_fact:
-        war_path: "/opt/deploy/{{ app_vars.app_name }}/{{ war_file }}"
-        war_url: "http://192.168.1.131:8081/repository/maven-releases/com/empresa/web/{{ app_vars.app_name }}/{{ app_vars.app_version }}/{{ war_file }}"
-
-    - name: Verificar puerto 7001 (AdminServer)
-      wait_for:
-        port: 7001
-        state: started
-        timeout: 30
-
-    - name: Crear carpeta de despliegue si no existe
-      file:
-        path: "/opt/deploy/{{ app_vars.app_name }}"
-        state: directory
-        mode: '0755'
-
-    - name: Eliminar WAR previo si existe
-      file:
-        path: "{{ war_path }}"
-        state: absent
-
-    - name: Descargar WAR desde Nexus
-      get_url:
-        url: "{{ war_url }}"
-        dest: "{{ war_path }}"
-        mode: '0644'
-        url_username: "{{ app_vars.nexus_user }}"
-        url_password: "{{ app_vars.nexus_pass }}"
-        use_netrc: false
-
-    - name: Obtener hash SHA256 del WAR
-      command: "sha256sum {{ war_path }}"
-      register: war_hash_result
-      changed_when: false
-
-    - name: Verificar hash del WAR con el esperado
+  pre_tasks:
+    - name: Validar parámetros obligatorios
       assert:
         that:
-          - "war_hash_result.stdout.split()[0] == app_vars.expected_sha256"
-        fail_msg: "❌ El WAR descargado no coincide con el hash esperado"
-        success_msg: "✅ Integridad confirmada vía SHA256"
+          - app_name is defined
+          - app_version is defined
+        fail_msg: "Los parámetros app_name y app_version son obligatorios"
 
-    - name: Crear carpeta de logs si no existe
-      become: true
+  tasks:
+    - name: Definir variables derivadas
+      set_fact:
+        war_file: "{{ app_config.name }}-{{ app_config.version }}.war"
+        war_path: "{{ paths.deploy_dir }}/{{ app_config.name }}/{{ war_file }}"
+        full_nexus_url: "{{ nexus_config.url }}/{{ app_config.nexus_path }}/{{ app_config.name }}/{{ app_config.version }}/{{ war_file }}"
+
+    - name: Crear estructura de directorios
       file:
-        path: "/opt/logs"
+        path: "{{ item }}"
         state: directory
         mode: '0755'
+      loop:
+        - "{{ paths.deploy_dir }}/{{ app_config.name }}"
+        - "{{ paths.logs_dir }}"
 
-    - name: Guardar log de preparación
-      copy:
-        content: |
-          [{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}] Preparación de entorno WebLogic:
-          App: {{ app_name }} v{{ app_version }}
-          WAR: {{ war_path }}
-          Hash actual: {{ war_hash_result.stdout.split()[0] }}
-          Hash esperado: {{ app_vars.expected_sha256 }}
-        dest: "/opt/logs/prepare_{{ app_name }}_{{ app_version }}.log"
+    - name: Verificar disponibilidad de WebLogic Admin Server
+      wait_for:
+        port: 7001
+        host: "{{ inventory_hostname }}"
+        timeout: 60
+        delay: 5
+
+    - name: Descargar artefacto desde Nexus
+      get_url:
+        url: "{{ full_nexus_url }}"
+        dest: "{{ war_path }}"
         mode: '0644'
+        url_username: "{{ nexus_config.credentials.username }}"
+        url_password: "{{ nexus_config.credentials.password }}"
+        validate_certs: no
+      register: download_result
+      retries: 3
+      delay: 10
+      until: download_result is succeeded
 
-    - name: Traer log al workspace Jenkins
-      fetch:
-        src: "/opt/logs/prepare_{{ app_name }}_{{ app_version }}.log"
-        dest: "logs/"
-        flat: yes
+    - name: Validar integridad del artefacto
+      stat:
+        path: "{{ war_path }}"
+      register: war_stat
+
+    - name: Calcular checksum SHA256
+      command: "sha256sum {{ war_path }}"
+      register: sha256_result
+      changed_when: false
+      when: war_stat.stat.exists
+
+    - name: Verificar checksum
+      assert:
+        that:
+          - sha256_result.stdout.split(' ')[0] == security.expected_sha256
+        fail_msg: "El checksum del WAR no coincide con el esperado"
+        success_msg: "Checksum validado correctamente"
+      when: war_stat.stat.exists
+
+    - name: Registrar preparación en log
+      block:
+        - name: Crear contenido del log
+          template:
+            src: templates/prepare_log.j2
+            dest: "{{ paths.logs_dir }}/prepare_{{ app_config.name }}_{{ app_config.version }}.log"
+            mode: '0644'
+
+        - name: Recuperar log para Jenkins
+          fetch:
+            src: "{{ paths.logs_dir }}/prepare_{{ app_config.name }}_{{ app_config.version }}.log"
+            dest: "logs/"
+            flat: yes
+      when: war_stat.stat.exists

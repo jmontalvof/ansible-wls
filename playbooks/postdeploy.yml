@@ -1,47 +1,34 @@
 ---
-- name: Validar despliegue WebLogic y estado de la app
-  hosts: all
-  become: false
+- name: Validar despliegue de aplicación
+  hosts: weblogic_servers
+  vars_files:
+    - "../vars/{{ app_name }}.yml"
 
   tasks:
-
-    - name: Definir app y versión
+    - name: Definir URL de prueba
       set_fact:
-        app_name: "{{ app_name }}"
-        app_version: "{{ app_version }}"
+        test_url: "http://{{ ansible_host }}:7001{{ app_config.context_root }}/health"
 
-    - name: Cargar variables de configuración
-      include_vars:
-        file: "../vars/{{ app_name }}.yml"
-        name: app_vars
-
-    - name: Fecha de verificación
-      set_fact:
-        fecha_verificacion: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
-
-    - name: Verificar app levantada (no bloquea si falla)
+    - name: Esperar disponibilidad de la aplicación
       uri:
-        url: "http://{{ app_vars.dominio }}:7001/{{ app_name }}/"
+        url: "{{ test_url }}"
         method: GET
-        return_content: yes
         status_code: 200
-        timeout: 10
-      register: app_check
-      ignore_errors: true
+        timeout: 30
+        body_format: json
+      register: health_check
+      until: health_check.status == 200
+      retries: 10
+      delay: 10
 
-    - name: Guardar log post-deploy
-      copy:
-        content: |
-          [{{ fecha_verificacion }}] Verificación WebLogic
-          App: {{ app_name }} v{{ app_version }}
-          URL: http://{{ app_vars.dominio }}:7001/{{ app_name }}/
-          Código HTTP: {{ app_check.status | default('No disponible') }}
-          HTML: {{ app_check.content[:200] | default('Sin contenido') }}
-        dest: "/opt/logs/verify_{{ app_name }}_{{ fecha_verificacion }}.log"
+    - name: Registrar resultados de validación
+      template:
+        src: templates/postdeploy_log.j2
+        dest: "{{ paths.logs_dir }}/postdeploy_{{ app_config.name }}_{{ app_config.version }}.log"
         mode: '0644'
 
-    - name: Traer log al workspace Jenkins
+    - name: Recuperar log para Jenkins
       fetch:
-        src: "/opt/logs/verify_{{ app_name }}_{{ fecha_verificacion }}.log"
+        src: "{{ paths.logs_dir }}/postdeploy_{{ app_config.name }}_{{ app_config.version }}.log"
         dest: "logs/"
         flat: yes

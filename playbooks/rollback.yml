@@ -1,60 +1,43 @@
 ---
 - name: Rollback de aplicación en WebLogic
-  hosts: all
-  become: false
+  hosts: weblogic_servers
+  vars_files:
+    - "../vars/{{ app_name }}.yml"
 
   tasks:
-
-    - name: Cargar variables de la aplicación
-      include_vars:
-        file: "../vars/{{ app_name }}.yml"
-        name: app_vars
-
-    - name: Definir nombre del archivo WAR y ruta
-      set_fact:
-        war_file: "{{ app_vars.app_name }}-{{ app_vars.app_version }}.war"
-        war_path: "/opt/deploy/{{ app_vars.app_name }}/{{ war_file }}"
-
-    - name: Definir fecha de rollback
-      set_fact:
-        fecha_rollback: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
-
-    - name: Crear carpeta de logs si no existe
-      file:
-        path: "/opt/logs"
-        state: directory
-        mode: '0755'
-
-    - name: Ejecutar rollback (undeploy)
-      shell: |
-        java weblogic.Deployer \
-          -adminurl t3://{{ app_vars.dominio }}:7001 \
-          -username {{ wl_user }} \
-          -password {{ wl_pass }} \
-          -undeploy \
-          -name {{ app_vars.app_name }} \
-          -targets {{ app_vars.targets }} \
-          -verbose
-      register: rollback_result
+    - name: Detener aplicación
+      command: >
+        java weblogic.Deployer
+        -adminurl {{ weblogic_config.admin_url }}
+        -username {{ wl_user }}
+        -password {{ wl_pass }}
+        -stop
+        -name {{ app_config.name }}
+        -targets {{ weblogic_config.targets }}
+      register: stop_result
       ignore_errors: true
+      no_log: true
 
-    - name: Mostrar resultado del rollback
-      debug:
-        var: rollback_result.stdout_lines
+    - name: Eliminar aplicación
+      command: >
+        java weblogic.Deployer
+        -adminurl {{ weblogic_config.admin_url }}
+        -username {{ wl_user }}
+        -password {{ wl_pass }}
+        -undeploy
+        -name {{ app_config.name }}
+        -targets {{ weblogic_config.targets }}
+      register: undeploy_result
+      no_log: true
 
-    - name: Guardar log del rollback
-      copy:
-        content: |
-          [{{ fecha_rollback }}] Rollback WebLogic:
-          App: {{ app_vars.app_name }} v{{ app_vars.app_version }}
-          Resultado:
-          {{ rollback_result.stdout }}
-        dest: "/opt/logs/rollback_{{ app_vars.app_name }}_{{ fecha_rollback }}.log"
+    - name: Registrar log de rollback
+      template:
+        src: templates/rollback_log.j2
+        dest: "{{ paths.logs_dir }}/rollback_{{ app_config.name }}_{{ app_config.version }}.log"
         mode: '0644'
 
-    - name: Traer log al workspace Jenkins
+    - name: Recuperar log para Jenkins
       fetch:
-        src: "/opt/logs/rollback_{{ app_vars.app_name }}_{{ fecha_rollback }}.log"
+        src: "{{ paths.logs_dir }}/rollback_{{ app_config.name }}_{{ app_config.version }}.log"
         dest: "logs/"
         flat: yes
-

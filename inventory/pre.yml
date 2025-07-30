@@ -1,6 +1,9 @@
-all:
+---
+weblogic_servers:
   hosts:
-    weblogic-server:
+    weblogic01:
       ansible_host: 192.168.1.143
       ansible_user: jorge
-
+      ansible_connection: ssh
+      weblogic_home: /home/jorge/Oracle/Middleware/Oracle_Home
+      java_home: /opt/java11

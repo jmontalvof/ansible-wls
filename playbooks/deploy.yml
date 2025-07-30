@@ -1,89 +1,56 @@
 ---
-- name: Desplegar aplicación WAR en WebLogic
-  hosts: all
-  become: false
+- name: Desplegar aplicación en WebLogic
+  hosts: weblogic_servers
+  vars_files:
+    - "../vars/{{ app_name }}.yml"
+  environment:
+    PATH: "{{ java_home }}/bin:{{ ansible_env.PATH }}"
+    CLASSPATH: "{{ weblogic_home }}/wlserver/server/lib/weblogic.jar"
 
   tasks:
-
-    - name: Definir nombre de la aplicación y versión
+    - name: Definir variables de despliegue
       set_fact:
-        app_name: "{{ app_name }}"
-        app_version: "{{ app_version }}"
+        war_path: "{{ paths.deploy_dir }}/{{ app_config.name }}/{{ app_config.name }}-{{ app_config.version }}.war"
+        deploy_timestamp: "{{ ansible_date_time.iso8601 }}"
 
-    - name: Cargar variables de la aplicación
-      include_vars:
-        file: "../vars/{{ app_name }}.yml"
-        name: app_vars
+    - name: Verificar existencia del WAR
+      stat:
+        path: "{{ war_path }}"
+      register: war_stat
 
-    - name: Definir fecha de despliegue
-      set_fact:
-        fecha_deploy: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+    - name: Ejecutar despliegue WebLogic
+      command: >
+        java weblogic.Deployer
+        -adminurl {{ weblogic_config.admin_url }}
+        -username {{ wl_user }}
+        -password {{ wl_pass }}
+        -deploy -source {{ war_path }}
+        -targets {{ weblogic_config.targets }}
+        -name {{ app_config.name }}
+        -appversion {{ app_config.version }}
+        -timeout {{ weblogic_config.deploy_timeout }}
+        -upload -remote -verbose
+      register: deploy_result
+      no_log: true
+      when: war_stat.stat.exists
 
-    - name: Crear carpeta de logs si no existe
-      file:
-        path: "/opt/logs"
-        state: directory
-        mode: '0755'
-
-    - name: Definir ruta del WAR
-      set_fact:
-        war_path: "/opt/deploy/{{ app_name }}/{{ app_name }}-{{ app_version }}.war"
-
-    - name: Descargar WAR desde Nexus
-      get_url:
-        url: "{{ app_vars.nexus_url }}/com/empresa/web/{{ app_name }}/{{ app_version }}/{{ app_name }}-{{ app_version }}.war"
-        dest: "{{ war_path }}"
-        mode: '0644'
-        url_username: "{{ lookup('env', 'NEXUS_USER') }}"
-        url_password: "{{ lookup('env', 'NEXUS_PASS') }}"
-        use_netrc: false
-
-    - name: Validar integridad del WAR
-      command: "sha256sum {{ war_path }}"
-      register: war_hash_result
-      changed_when: false
-
-    - name: Verificar hash
+    - name: Validar resultado del despliegue
       assert:
         that:
-          - "war_hash_result.stdout.split()[0] == app_vars.expected_sha256"
-        fail_msg: "❌ Hash incorrecto"
-        success_msg: "✅ Hash correcto"
+          - "'deploy completed' in deploy_result.stdout"
+        fail_msg: "Error en el despliegue: {{ deploy_result.stdout }}"
+      when: war_stat.stat.exists
 
-    - name: Desplegar WAR en WebLogic
-      shell: |
-        java -cp /home/jorge/Oracle/Middleware/Oracle_Home/wlserver/server/lib/weblogic.jar weblogic.Deployer \
-          -adminurl t3://{{ app_vars.dominio }}:7001 \
-          -username {{ wl_user }} \
-          -password {{ wl_pass }} \
-          -deploy \
-          -source {{ war_path }} \
-          -targets {{ app_vars.targets }} \
-          -name {{ app_vars.app_name }} \
-          -update \
-          -remote \
-          -verbose
-      register: deploy_result
-      environment:
-        PATH: "/opt/java11/bin:{{ ansible_env.PATH }}"
-      changed_when: "'deploy completed' in deploy_result.stdout"
-      ignore_errors: false
-
-    - name: Mostrar resultado del despliegue
-      debug:
-        var: deploy_result.stdout
-
-    - name: Guardar log del despliegue
-      copy:
-        content: |
-          [{{ fecha_deploy }}] WAR: {{ war_path }}
-          Hash: {{ war_hash_result.stdout.split()[0] }} vs {{ app_vars.expected_sha256 }}
-          Resultado: {{ deploy_result.stdout }}
-        dest: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
+    - name: Registrar log de despliegue
+      template:
+        src: templates/deploy_log.j2
+        dest: "{{ paths.logs_dir }}/deploy_{{ app_config.name }}_{{ app_config.version }}.log"
         mode: '0644'
+      when: war_stat.stat.exists
 
-    - name: Traer log al workspace Jenkins
+    - name: Recuperar log para Jenkins
       fetch:
-        src: "/opt/logs/deploy_{{ app_name }}_{{ fecha_deploy }}.log"
+        src: "{{ paths.logs_dir }}/deploy_{{ app_config.name }}_{{ app_config.version }}.log"
         dest: "logs/"
         flat: yes
+      when: war_stat.stat.exists

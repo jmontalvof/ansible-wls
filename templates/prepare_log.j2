@@ -1,0 +1,7 @@
+[{{ ansible_date_time.iso8601 }}] PREPARE LOG - {{ app_config.name }} v{{ app_config.version }}
+Host: {{ inventory_hostname }}
+WAR Path: {{ war_path }}
+Size: {{ war_stat.stat.size | default(0) | filesizeformat }}
+SHA256: {{ sha256_result.stdout | default('N/A') }}
+Expected SHA256: {{ security.expected_sha256 }}
+Validation: {% if sha256_result.stdout.split(' ')[0] == security.expected_sha256 %}SUCCESS{% else %}FAILURE{% endif %}
