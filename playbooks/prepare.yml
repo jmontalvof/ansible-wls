@@ -1,30 +1,118 @@
 ---
-- name: Preparar entorno WebLogic
-  hosts: weblogic_servers
-  vars_files:
-    - "../vars/{{ app_name }}.yml"  # Carga las variables primero
+- name: Preparar entorno WebLogic antes del despliegue
+  hosts: all
+  gather_facts: false
+  become: false
+
+  vars:
+    admin_port: 7001
+    # Si quieres probar copiando artefactos desde el workspace en lugar de Nexus:
+    use_local_artifact: false
+    local_artifacts_dir: "../artifacts"     # donde Jenkins deja .war/.ear/.jar
 
   tasks:
-    # Debug: Verificar variables cargadas
-    - name: Mostrar variables cargadas
-      debug:
-        var: app_config
-      when: app_config is defined
+    # 1) Cargar defaults y variables de la app
+    - name: Cargar defaults
+      include_vars:
+        file: "../vars/_defaults.yml"
+        name: defaults
 
-    # Definir variables en ORDEN CORRECTO
-    - name: Definir war_file (PRIMERO)
+    - name: Cargar variables de la app
+      include_vars:
+        file: "../vars/{{ app_name }}.yml"
+        name: app
+
+    # 2) Derivados (funcionan para war/ear/jar)
+    - name: Calcular nombre de archivo (WAR/EAR/JAR)
       set_fact:
-        war_file: "{{ app_config.name }}-{{ app_config.version }}.war"
+        file_name: >-
+          {% if app.artifact_type == 'jar' %}
+            {{ app.library_name }}-{{ app.app_version }}.jar
+          {% else %}
+            {{ app.app_name }}-{{ app.app_version }}.{{ app.artifact_type }}
+          {% endif %}
 
-    - name: Definir rutas derivadas (DESPUÉS)
+    - name: Calcular carpeta y ruta de artefacto
       set_fact:
-        war_path: "{{ paths.deploy_dir }}/{{ app_config.name }}/{{ war_file }}"
-        full_nexus_url: "{{ nexus_config.url }}/{{ app_config.nexus_path }}/{{ app_config.name }}/{{ app_config.version }}/{{ war_file }}"
+        artifact_dir: "/opt/deploy/{{ app.app_name if app.artifact_type in ['war','ear'] else app.library_name }}"
+        artifact_path: "{{ artifact_dir }}/{{ file_name }}"
 
-    # Verificar resultados
-    - name: Mostrar variables generadas
-      debug:
-        msg:
-          - "Archivo WAR: {{ war_file }}"
-          - "Ruta destino: {{ war_path }}"
-          - "URL Nexus: {{ full_nexus_url }}"
+    - name: Seleccionar group_path según tipo
+      set_fact:
+        effective_group_path: "{{ defaults.group_path_app if app.artifact_type in ['war','ear'] else defaults.group_path_lib }}"
+
+    - name: Construir URL de Nexus
+      set_fact:
+        artifact_url: "{{ defaults.nexus_url }}/{{ effective_group_path }}/{{ (app.app_name if app.artifact_type in ['war','ear'] else app.library_name) }}/{{ app.app_version }}/{{ file_name }}"
+
+    # 3) Comprobación de AdminServer
+    - name: Verificar que el AdminServer está escuchando
+      wait_for:
+        host: "{{ defaults.dominio }}"
+        port: "{{ admin_port }}"
+        state: started
+        timeout: 30
+
+    # 4) Preparar carpetas
+    - name: Asegurar carpeta destino del artefacto
+      file:
+        path: "{{ artifact_dir }}"
+        state: directory
+        mode: "0755"
+
+    # 5) Obtener artefacto (elige Nexus o copia local)
+    - name: Descargar artefacto desde Nexus
+      when: not use_local_artifact
+      get_url:
+        url:  "{{ artifact_url }}"
+        dest: "{{ artifact_path }}"
+        mode: "0644"
+        url_username: "{{ app.nexus_user | default(defaults.nexus_user) | default(omit) }}"
+        url_password: "{{ app.nexus_pass | default(defaults.nexus_pass) | default(omit) }}"
+        use_netrc: false
+        timeout: 30
+
+    - name: Copiar artefacto desde workspace (opción local)
+      when: use_local_artifact
+      copy:
+        src: "{{ local_artifacts_dir }}/{{ file_name }}"
+        dest: "{{ artifact_path }}"
+        mode: "0644"
+
+    # 6) Integridad (opcional): SHA256 si está definido
+    - name: Obtener hash SHA256
+      command: "sha256sum {{ artifact_path }}"
+      register: sha
+      changed_when: false
+
+    - name: Validar SHA256 si se definió
+      when: (app.expected_sha256 | default('')) | length > 0
+      assert:
+        that:
+          - "sha.stdout.split()[0] == app.expected_sha256"
+        fail_msg: "❌ Hash incorrecto del artefacto"
+        success_msg: "✅ Hash verificado"
+
+    # 7) Logs
+    - name: Crear carpeta de logs si no existe
+      file:
+        path: "/opt/logs"
+        state: directory
+        mode: "0755"
+
+    - name: Guardar log de preparación
+      copy:
+        dest: "/opt/logs/prepare_{{ app.app_name | default(app.library_name) }}_{{ app.app_version }}.log"
+        mode: "0644"
+        content: |
+          [{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}] Preparación OK
+          Tipo: {{ app.artifact_type }}
+          Artefacto: {{ artifact_path }}
+          URL: {{ artifact_url }}
+          Hash: {{ sha.stdout.split()[0] | default('N/A') }}
+
+    - name: Traer log al workspace Jenkins
+      fetch:
+        src: "/opt/logs/prepare_{{ app.app_name | default(app.library_name) }}_{{ app.app_version }}.log"
+        dest: "logs/"
+        flat: yes
