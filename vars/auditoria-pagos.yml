@@ -1,0 +1,19 @@
+# ===== DESTINO WEBLOGIC =====
+targets: Cluster01
+
+# ===== LIBRERÍA =====
+artifact_type: jar
+library_name: journal
+app_version: "1.2"
+library_spec_version: ""     # opcional
+library_impl_version: ""     # opcional
+
+# ===== NEXUS =====
+nexus_url: http://192.168.1.131:8081/repository/maven-releases
+group_path_app: com/empresa/auditoria
+group_path_lib: com/empresa/libs
+nexus_user: "{{ lookup('env', 'NEXUS_USER') }}"
+nexus_pass: "{{ lookup('env', 'NEXUS_PASS') }}"
+
+# ===== INTEGRIDAD (opcional) =====
+expected_sha256: "bb77d9158f6052ce20f5b392a11bc8710500c53d84801ac0890c4cd473983d99"
