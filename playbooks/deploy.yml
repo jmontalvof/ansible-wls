@@ -1,56 +1,176 @@
 ---
-- name: Desplegar aplicación en WebLogic
-  hosts: weblogic_servers
-  vars_files:
-    - "../vars/{{ app_name }}.yml"
-  environment:
-    PATH: "{{ java_home }}/bin:{{ ansible_env.PATH }}"
-    CLASSPATH: "{{ weblogic_home }}/wlserver/server/lib/weblogic.jar"
+- name: Desplegar artefacto en WebLogic (WAR / EAR / JAR)
+  hosts: all
+  gather_facts: false
+  become: false
+
+  vars:
+    admin_port: "{{ common_vars.admin_port | default(7001) }}"
+    # Si en PREPARE descargaste a /opt/deploy, aquí volvemos a calcular la MISMA ruta.
+    default_deploy_base: "/opt/deploy"
 
   tasks:
-    - name: Definir variables de despliegue
+    # 1) Cargar variables comunes y de la app
+    - name: Cargar variables comunes
+      include_vars:
+        file: "../vars/common.yml"
+        name: common_vars
+
+    - name: Cargar variables de la aplicación
+      include_vars:
+        file: "../vars/{{ app_name }}-{{ app_version }}.yml"
+        name: app_vars
+
+    - name: Definir fecha de despliegue
       set_fact:
-        war_path: "{{ paths.deploy_dir }}/{{ app_config.name }}/{{ app_config.name }}-{{ app_config.version }}.war"
-        deploy_timestamp: "{{ ansible_date_time.iso8601 }}"
+        fecha_deploy: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
 
-    - name: Verificar existencia del WAR
-      stat:
-        path: "{{ war_path }}"
-      register: war_stat
+    # 2) Derivados (compatibles con WAR/EAR/JAR)
+    - name: Calcular nombre de archivo
+      set_fact:
+        file_name: >-
+          {% if app_vars.artifact_type == 'jar' %}
+            {{ app_vars.library_name }}-{{ app_vars.app_version }}.jar
+          {% else %}
+            {{ app_vars.app_name }}-{{ app_vars.app_version }}.{{ app_vars.artifact_type }}
+          {% endif %}
 
-    - name: Ejecutar despliegue WebLogic
-      command: >
-        java weblogic.Deployer
-        -adminurl {{ weblogic_config.admin_url }}
-        -username {{ wl_user }}
-        -password {{ wl_pass }}
-        -deploy -source {{ war_path }}
-        -targets {{ weblogic_config.targets }}
-        -name {{ app_config.name }}
-        -appversion {{ app_config.version }}
-        -timeout {{ weblogic_config.deploy_timeout }}
-        -upload -remote -verbose
-      register: deploy_result
-      no_log: true
-      when: war_stat.stat.exists
+    - name: Calcular ruta local del artefacto (debe existir desde PREPARE)
+      set_fact:
+        artifact_dir: "{{ default_deploy_base }}/{{ (app_vars.app_name if app_vars.artifact_type in ['war','ear'] else app_vars.library_name) }}"
+        artifact_path: "{{ artifact_dir }}/{{ file_name }}"
 
-    - name: Validar resultado del despliegue
+    - name: Nombre lógico para despliegue (app vs librería)
+      set_fact:
+        deploy_logical_name: >-
+          {% if app_vars.artifact_type == 'jar' %}
+            {{ app_vars.library_name }}{% if app_vars.library_spec_version|default('') %}#{{ app_vars.library_spec_version }}{% endif %}{% if app_vars.library_impl_version|default('') %}@{{ app_vars.library_impl_version }}{% endif %}
+          {% else %}
+            {{ app_vars.app_name }}
+          {% endif %}
+
+    # 3) Validación de integridad (opcional)
+    - name: Validar integridad del artefacto (SHA256)
+      command: "sha256sum {{ artifact_path }}"
+      register: sha
+      changed_when: false
+
+    - name: Comprobar SHA256 si se definió
+      when: (app_vars.expected_sha256 | default('')) | length > 0
       assert:
-        that:
-          - "'deploy completed' in deploy_result.stdout"
-        fail_msg: "Error en el despliegue: {{ deploy_result.stdout }}"
-      when: war_stat.stat.exists
+        that: ["sha.stdout.split()[0] == app_vars.expected_sha256"]
+        fail_msg: "✗ Hash incorrecto"
+        success_msg: "✓ Hash correcto"
 
-    - name: Registrar log de despliegue
-      template:
-        src: templates/deploy_log.j2
-        dest: "{{ paths.logs_dir }}/deploy_{{ app_config.name }}_{{ app_config.version }}.log"
-        mode: '0644'
-      when: war_stat.stat.exists
+    # 4) UNDEPLOY (condicional por tipo)
+    - name: Undeploy de aplicación (WAR/ENS) si existe
+      when: app_vars.artifact_type in ['war','ear']
+      shell: |
+        java -cp {{ common_vars.oracle_home }}/wlserver/server/lib/weblogic.jar weblogic.Deployer \
+          -adminurl t3://{{ common_vars.domain }}:{{ admin_port }} \
+          -userconfigfile {{ common_vars.userconfigfile }} \
+          -userkeyfile {{ common_vars.userkeyfile }} \
+          -undeploy \
+          -name {{ deploy_logical_name }} \
+          -verbose
+      register: undeploy_result_app
+      environment:
+        PATH: "{{ ansible_env.JAVA_HOME | default('/usr/java/latest') }}/bin:{{ ansible_env.PATH }}"
+      changed_when: "'undeploy completed' in (undeploy_result_app.stdout | default(''))"
+      failed_when: >
+        (undeploy_result_app.rc != 0)
+        and (
+          (undeploy_result_app.stdout | default('')) is not regex_search('No application (named|with name).*?(exists|deployed)', ignorecase=True)
+          and (undeploy_result_app.stderr | default('')) is not regex_search('No application (named|with name).*?(exists|deployed)', ignorecase=True)
+        )
 
-    - name: Recuperar log para Jenkins
+    - name: Undeploy de librería (JAR) si existe
+      when: app_vars.artifact_type == 'jar'
+      shell: |
+        java -cp {{ common_vars.oracle_home }}/wlserver/server/lib/weblogic.jar weblogic.Deployer \
+          -adminurl t3://{{ common_vars.domain }}:{{ admin_port }} \
+          -userconfigfile {{ common_vars.userconfigfile }} \
+          -userkeyfile {{ common_vars.userkeyfile }} \
+          -undeploy -library \
+          -name {{ deploy_logical_name }} \
+          -verbose
+      register: undeploy_result_lib
+      environment:
+        PATH: "{{ ansible_env.JAVA_HOME | default('/usr/java/latest') }}/bin:{{ ansible_env.PATH }}"
+      changed_when: "'undeploy completed' in (undeploy_result_lib.stdout | default(''))"
+      failed_when: >
+        (undeploy_result_lib.rc != 0)
+        and (
+          (undeploy_result_lib.stdout | default('')) is not regex_search('No application (named|with name).*?(exists|deployed)', ignorecase=True)
+          and (undeploy_result_lib.stderr | default('')) is not regex_search('No application (named|with name).*?(exists|deployed)', ignorecase=True)
+        )
+
+    # 5) DEPLOY (condicional por tipo)
+    - name: Desplegar WAR/ENS (aplicación)
+      when: app_vars.artifact_type in ['war','ear']
+      shell: |
+        java -cp {{ common_vars.oracle_home }}/wlserver/server/lib/weblogic.jar weblogic.Deployer \
+          -adminurl t3://{{ common_vars.domain }}:{{ admin_port }} \
+          -userconfigfile {{ common_vars.userconfigfile }} \
+          -userkeyfile {{ common_vars.userkeyfile }} \
+          -deploy \
+          -name {{ deploy_logical_name }} \
+          -targets {{ app_vars.targets }} \
+          -source {{ artifact_path }} \
+          -upload -stage -verbose
+      register: deploy_result_app
+      environment:
+        PATH: "{{ ansible_env.JAVA_HOME | default('/usr/java/latest') }}/bin:{{ ansible_env.PATH }}"
+      changed_when: "'deploy completed' in (deploy_result_app.stdout | default(''))"
+
+    - name: Desplegar JAR (librería compartida)
+      when: app_vars.artifact_type == 'jar'
+      shell: |
+        java -cp {{ common_vars.oracle_home }}/wlserver/server/lib/weblogic.jar weblogic.Deployer \
+          -adminurl t3://{{ common_vars.domain }}:{{ admin_port }} \
+          -userconfigfile {{ common_vars.userconfigfile }} \
+          -userkeyfile {{ common_vars.userkeyfile }} \
+          -deploy -library \
+          -name {{ deploy_logical_name }} \
+          -source {{ artifact_path }} \
+          -targets {{ app_vars.targets }} \
+          -upload -verbose
+      register: deploy_result_lib
+      environment:
+        PATH: "{{ ansible_env.JAVA_HOME | default('/usr/java/latest') }}/bin:{{ ansible_env.PATH }}"
+      changed_when: "'deploy completed' in (deploy_result_lib.stdout | default(''))"
+
+    # 6) Logs y artefactos para Jenkins
+    - name: Asegurar carpeta de logs
+      file:
+        path: "/tmp/logs"
+        state: directory
+        mode: "0755"
+
+    - name: Guardar log de UNDEPLOY
+      copy:
+        dest: "/tmp/logs/deploy_{{ deploy_logical_name }}_{{ fecha_deploy }}.log"
+        mode: "0644"
+        content: |
+          [{{ fecha_deploy }}] UNDEPLOY
+          Artefacto: {{ artifact_path }}
+          Resultado:
+          {{ (undeploy_result_app.stdout if app_vars.artifact_type in ['war','ear'] else undeploy_result_lib.stdout) | default('') }}
+
+    - name: Guardar log de DEPLOY
+      copy:
+        dest: "/tmp/logs/deploy_{{ deploy_logical_name }}_{{ fecha_deploy }}.log"
+        mode: "0644"
+        content: |
+          [{{ fecha_deploy }}] DEPLOY
+          Tipo: {{ app_vars.artifact_type }}
+          Artefacto: {{ artifact_path }}
+          Hash: {{ sha.stdout.split()[0] | default('N/A') }} (esperado: {{ app_vars.expected_sha256 | default('N/A') }})
+          Resultado:
+          {{ (deploy_result_app.stdout if app_vars.artifact_type in ['war','ear'] else deploy_result_lib.stdout) | default('') }}
+
+    - name: Traer log al workspace Jenkins
       fetch:
-        src: "{{ paths.logs_dir }}/deploy_{{ app_config.name }}_{{ app_config.version }}.log"
+        src: "/tmp/logs/deploy_{{ deploy_logical_name }}_{{ fecha_deploy }}.log"
         dest: "logs/"
         flat: yes
-      when: war_stat.stat.exists

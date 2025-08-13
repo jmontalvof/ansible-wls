@@ -1,0 +1,58 @@
+# ===== DESTINO WEBLOGIC =====
+dominio: 192.168.1.143          # IP o hostname del AdminServer
+targets: Cluster01              # Target WebLogic donde desplegar
+
+# ===== APLICACIÓN / ARTEFACTO =====
+# Tipo de artefacto: war | ear | jar
+artifact_type: war
+
+# Para WAR / EAR
+app_name: nombre-aplicacion
+app_version: "1.0"
+
+# Para JAR (librería compartida)
+# Si tu librería no va versionada en el nombre lógico, deja solo library_name
+library_name: nombre-libreria
+library_spec_version: ""        # ej. "1.1"  (opcional)
+library_impl_version: ""        # ej. "1.1"  (opcional)
+
+# ===== NEXUS =====
+nexus_url: http://192.168.1.131:8081/repository/maven-releases
+# Separa los grupos por claridad (puedes usar el mismo si no distingues)
+group_path_app: com/empresa/aplicaciones
+group_path_lib: com/empresa/librerias
+nexus_user: "{{ lookup('env', 'NEXUS_USER') }}"
+nexus_pass: "{{ lookup('env', 'NEXUS_PASS') }}"
+
+# ===== INTEGRIDAD (opcional) =====
+expected_sha256: ""             # Hash SHA256 esperado para verificar integridad
+
+# ===== DERIVADOS (NO TOCAR) =====
+# Nombre de archivo a descargar
+file_name: >-
+  {% if artifact_type == 'jar' %}
+    {{ library_name }}-{{ app_version }}.jar
+  {% else %}
+    {{ app_name }}-{{ app_version }}.{{ artifact_type }}
+  {% endif %}
+
+# Path local donde se descarga el artefacto en el host destino
+artifact_path: "/opt/deploy/{{
+  (app_name if artifact_type in ['war','ear'] else library_name)
+}}/{{ file_name }}"
+
+# Group path según sea app o librería
+_effective_group_path: "{{ group_path_app if artifact_type in ['war','ear'] else group_path_lib }}"
+
+# URL de descarga en Nexus
+artifact_url: "{{ nexus_url }}/{{ _effective_group_path }}/{{ (
+  app_name if artifact_type in ['war','ear'] else library_name
+) }}/{{ app_version }}/{{ file_name }}"
+
+# Nombre lógico para desplegar
+deploy_logical_name: >-
+  {% if artifact_type == 'jar' %}
+    {{ library_name }}{% if library_spec_version %}#{{ library_spec_version }}{% endif %}{% if library_impl_version %}@{{ library_impl_version }}{% endif %}
+  {% else %}
+    {{ app_name }}
+  {% endif %}
