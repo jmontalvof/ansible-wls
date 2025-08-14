@@ -1,0 +1,91 @@
+---
+- name: Despliegue WebLogic (WAR/EAR/JAR) con flujo condicional
+  hosts: all
+  gather_facts: false
+  become: false
+
+  vars:
+    admin_port: 7001
+    # Señal para flujo especial cuando hay librerías y app dependiente
+    update_library: false    # true => undeploy app -> undeploy lib -> deploy lib -> deploy app
+
+  tasks:
+    # 1) Cargar defaults + app
+    - include_vars: { file: "../vars/_defaults.yml", name: defaults }
+    - include_vars: { file: "../vars/{{ app_name }}.yml", name: app }
+
+    # 2) Derivados (ya calculados en tu vars/<app>.yml, por si acaso):
+    - name: Asegurar derivados mínimos
+      set_fact:
+        deploy_logical_name: "{{ app.deploy_logical_name }}"
+        artifact_path: "{{ app.artifact_path }}"
+        artifact_type: "{{ app.artifact_type }}"
+        targets: "{{ app.targets | default(defaults.targets) }}"
+        dominio: "{{ app.dominio | default(defaults.dominio) }}"
+        oracle_home: "{{ defaults.oracle_home | default('/home/jorge/Oracle/Middleware/Oracle_Home') }}"
+        userconfigfile: "{{ defaults.userconfigfile | default('/home/jorge/wl.userconfig') }}"
+        userkeyfile: "{{ defaults.userkeyfile | default('/home/jorge/wl.userkey') }}"
+
+    # 3) Comando base (no repetir flags)
+    - name: Construir comando base weblogic.Deployer
+      set_fact:
+        wl_base: >-
+          java -cp {{ oracle_home }}/wlserver/server/lib/weblogic.jar weblogic.Deployer
+          -adminurl t3://{{ dominio }}:{{ admin_port }}
+          -userconfigfile {{ userconfigfile }}
+          -userkeyfile {{ userkeyfile }}
+
+    # 4) Definir la secuencia de acciones según tipo/escenario
+    - name: Definir lista de acciones
+      set_fact:
+        actions: >-
+          {% set a = [] %}
+          {% if artifact_type in ['war','ear'] and not update_library %}
+            {% set _ = a.append({'op':'undeploy','type':'app'}) %}
+            {% set _ = a.append({'op':'deploy','type':'app'}) %}
+          {% elif artifact_type == 'jar' and not update_library %}
+            {% set _ = a.append({'op':'undeploy','type':'lib'}) %}
+            {% set _ = a.append({'op':'deploy','type':'lib'}) %}
+          {% elif update_library %}
+            {# flujo completo: app depende de lib #}
+            {% set _ = a.append({'op':'undeploy','type':'app'}) %}
+            {% set _ = a.append({'op':'undeploy','type':'lib'}) %}
+            {% set _ = a.append({'op':'deploy','type':'lib'}) %}
+            {% set _ = a.append({'op':'deploy','type':'app'}) %}
+          {% endif %}
+          {{ a }}
+
+    # 5) Ejecutar acciones en orden (un solo bloque genérico)
+    - name: Ejecutar {{ item.op }} de {{ 'librería' if item.type=='lib' else 'aplicación' }}
+      loop: "{{ actions }}"
+      loop_control: { label: "{{ item.op }}-{{ item.type }}" }
+      shell: |
+        {{ wl_base }} \
+        -{{ item.op }} {{ '-library' if item.type == 'lib' else '' }} \
+        -name {{ deploy_logical_name }} \
+        {% if item.op == 'deploy' %}
+        -source {{ artifact_path }} -targets {{ targets }} -upload -stage
+        {% else %}
+        -targets {{ targets }}
+        {% endif %} \
+        -verbose
+      register: wl_result
+      changed_when: "'completed' in (wl_result.stdout | default(''))"
+      failed_when: >
+        (wl_result.rc != 0)
+        and not (
+          (wl_result.stdout | default('')) is regex_search('No application .* (exists|deployed)', ignorecase=True)
+          or (wl_result.stderr | default('')) is regex_search('No application .* (exists|deployed)', ignorecase=True)
+        )
+      environment:
+        PATH: "{{ ansible_env.JAVA_HOME | default('/usr/java/latest') }}/bin:{{ ansible_env.PATH }}"
+
+    # 6) Log final para Jenkins
+    - name: Escribir log de despliegue
+      copy:
+        dest: "/opt/logs/deploy_{{ deploy_logical_name }}_{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}.log"
+        mode: "0644"
+        content: |
+          Acciones: {{ actions | to_nice_json }}
+          Resultado bruto:
+          {{ wl_result.stdout | default('') }}
